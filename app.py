@@ -228,9 +228,10 @@ sample_posts = virtual_ta.scrape_discourse_posts(
 )
 virtual_ta.store_discourse_posts(sample_posts)
 
+# Keep your existing /api/ route as well
 @app.route('/api/', methods=['POST'])
 def answer_question():
-    """Main API endpoint for answering student questions"""
+    """API endpoint for answering student questions"""
     try:
         data = request.get_json()
         
@@ -248,25 +249,48 @@ def answer_question():
     except Exception as e:
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET', 'POST'])
 def home():
-    """Home page with API documentation"""
-    return jsonify({
-        "message": "TDS Virtual TA API",
-        "endpoints": {
-            "POST /api/": "Answer student questions",
-            "GET /health": "Health check"
-        },
-        "example_request": {
-            "question": "Should I use gpt-4o-mini which AI proxy supports, or gpt3.5 turbo?",
-            "image": "base64_encoded_image_optional"
-        }
-    })
+    """Handle both GET and POST requests at root"""
+    if request.method == 'POST':
+        # Handle POST request - same logic as /api/
+        try:
+            data = request.get_json()
+            
+            if not data or 'question' not in data:
+                return jsonify({"error": "Question is required"}), 400
+            
+            question = data['question']
+            image_base64 = data.get('image')
+            
+            # Generate answer
+            result = virtual_ta.generate_answer(question, image_base64)
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+    else:
+        # Handle GET request - return API documentation
+        return jsonify({
+            "message": "TDS Virtual TA API",
+            "endpoints": {
+                "POST /": "Answer student questions (root endpoint)",
+                "POST /api/": "Answer student questions (api endpoint)",
+                "GET /health": "Health check"
+            },
+            "example_request": {
+                "question": "Should I use gpt-4o-mini which AI proxy supports, or gpt3.5 turbo?",
+                "image": "base64_encoded_image_optional"
+            }
+        })
 
 if __name__ == '__main__':
     print("Starting the Flask server...")
