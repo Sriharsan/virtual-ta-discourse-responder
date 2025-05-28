@@ -10,7 +10,11 @@ from typing import List, Dict, Optional
 import re
 from dataclasses import dataclass
 
+from flask_cors import CORS
+
 app = Flask(__name__)
+CORS(app)  # This allows all origins
+
 
 # Configuration
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
