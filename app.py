@@ -30,7 +30,7 @@ class TDSVirtualTA:
             logger.warning("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
             self.openai_client = None
         else:
-            self.openai_client = OpenAI()
+            self.openai_client = OpenAI(api_key=api_key)
         
         # Initialize knowledge base
         self.initialize_knowledge_base()
