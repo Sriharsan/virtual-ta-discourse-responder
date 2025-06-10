@@ -1,6 +1,8 @@
 description: "TDS Virtual TA Project - 15 Realistic Evaluation Questions"
 
 providers:
+  - openai : gpt-4o-mini  # Temporary provider to satisfy promptfoo requirement
+
   - id: virtual-ta-api
     config:
       type: http
