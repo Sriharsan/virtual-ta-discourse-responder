@@ -178,7 +178,7 @@ def home():
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
-@app.route('/api/chat', methods=['POST'])
+@app.route('/api', methods=['GET', 'POST'])
 def chat():
     try:
         data = request.get_json()
