@@ -168,7 +168,7 @@ def home():
         "message": "Virtual TA API for TDS Course",
         "status": "active",
         "endpoints": {
-            "chat": "/api/chat",
+            "chat": "/api",
             "health": "/health",
             "summary": "/api/summary"
         }
