@@ -1,1 +1,169 @@
+description: "TDS Virtual TA Project - 15 Realistic Evaluation Questions"
 
+providers:
+  - id: https
+    config:
+      url: https://virtual-ta-discourse-responder.onrender.com/api/chat # Updated to your deployed URL
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "question": "{{ question }}"{% if image %},
+          "image": "{{ image }}"{% endif %}
+        }
+      transformResponse: json
+
+defaultTest:
+  assert:
+    - type: is-json
+      value:
+        type: object
+        required: [answer, links]
+        properties:
+          answer: { type: string }
+          links:
+            type: array
+            items:
+              type: object
+              required: [url, text]
+              properties:
+                url: { type: string }
+                text: { type: string }
+
+tests:
+  # Question 1: Model Selection
+  - vars:
+      question: The question asks to use gpt-3.5-turbo-0125 model but the ai-proxy provided by Anand sir only supports gpt-4o-mini. So should we just use gpt-4o-mini or use the OpenAI API for gpt3.5 turbo?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Clarifies use of gpt-3.5-turbo-0125 not gpt-4o-mini
+      - type: contains
+        transform: JSON.stringify(output.links)
+        value: discourse.onlinedegree.iitm.ac.in
+
+  # Question 2: Scoring Dashboard
+  - vars:
+      question: If a student scores 10/10 on GA4 as well as a bonus, how would it appear on the dashboard?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Mentions the dashboard showing "110"
+      - type: contains
+        transform: JSON.stringify(output.links)
+        value: discourse.onlinedegree.iitm.ac.in
+
+  # Question 3: Docker vs Podman
+  - vars:
+      question: I know Docker but have not used Podman before. Should I use Docker for this course?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Recommends Podman for the course
+      - type: contains
+        transform: JSON.stringify(output.links)
+        value: tds.s-anand.net
+
+  # Question 4: Future Course Info
+  - vars:
+      question: When is the TDS Sep 2025 end-term exam?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Says it doesn't know or information not available
+
+  # Question 5: Project 1 Deadline
+  - vars:
+      question: Has the Project 1 deadline been extended? I see conflicting dates in different announcements.
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Mentions deadline extension to 16 Feb 2025
+      - type: contains
+        transform: JSON.stringify(output.links)
+        value: discourse.onlinedegree.iitm.ac.in
+
+  # Question 6: Submission Issues
+  - vars:
+      question: My TDS assignment is not submitting through the portal. I keep getting an error. What should I do?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Provides troubleshooting steps or contact information
+
+  # Question 7: API Quota
+  - vars:
+      question: When running the llm embed command, I'm getting 'insufficient_quota' error but I've only used the model 2-3 times. How do I increase my quota?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Mentions quota management or API key issues
+
+  # Question 8: Course Difficulty
+  - vars:
+      question: I'm finding TDS too difficult at my current level. Should I drop this course and take it in a later term?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Mentions GA1 prerequisite check or dropping course advice
+
+  # Question 9: GitHub Repository
+  - vars:
+      question: For Project 1, do I need to make my GitHub repository public? And what should I include in the LICENSE file?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Mentions public repository and MIT license requirements
+
+  # Question 10: Vector Databases
+  - vars:
+      question: I'm getting an error for the Vector Databases question worth 1 mark in GA3. The validation seems to be failing even though my answer looks correct.
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Addresses GA3 or vector database issues
+
+  # Question 11: Vercel Deployment
+  - vars:
+      question: I'm getting a deployment error when trying to deploy my project on Vercel. The build keeps failing. Any suggestions?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Provides deployment troubleshooting advice
+
+  # Question 12: Course Material Access  
+  - vars:
+      question: Where can I find the recorded sessions for TDS? I missed the live session on 10th May.
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Mentions YouTube playlist or course material access
+
+  # Question 13: Evaluation Methodology
+  - vars:
+      question: How are the TDS projects evaluated? Are they manually graded or automatically evaluated using LLMs?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Mentions automated evaluation or LLM-based grading
+
+  # Question 14: Google Cloud Setup
+  - vars:
+      question: I'm having trouble creating a Google Cloud Project for Module 2, Q11. It says 'You must select a parent organization or folder'. What should I do?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Provides GCP setup guidance
+
+  # Question 15: Course Completion
+  - vars:
+      question: What's the minimum score needed to pass TDS? How are the final grades calculated with the best 4 out of 7 GA rule?
+    assert:
+      - type: llm-rubric
+        transform: output.answer
+        value: Explains grading methodology or best 4 out of 7 rule
+
+writeLatestResults: true
+commandLineOptions:
+  cache: true
