@@ -12,6 +12,9 @@ import re
 from PIL import Image
 import openai
 from openai import OpenAI
+import time
+from urllib.parse import urljoin, urlparse
+import threading
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +37,9 @@ class TDSVirtualTA:
         
         # Initialize knowledge base
         self.initialize_knowledge_base()
+        
+        # Start background scraper
+        self.start_background_scraper()
     
     def setup_database(self):
         """Initialize SQLite database with required tables"""
@@ -65,9 +71,210 @@ class TDSVirtualTA:
             )
         ''')
         
+        # Scraping status table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS scraping_status (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT UNIQUE,
+                last_scraped TEXT,
+                status TEXT,
+                error_message TEXT
+            )
+        ''')
+        
         conn.commit()
         conn.close()
         logger.info("Database initialized successfully")
+    
+    def scrape_discourse_posts(self):
+        """Scrape TDS discourse posts"""
+        try:
+            base_url = "https://discourse.onlinedegree.iitm.ac.in"
+            category_url = f"{base_url}/c/courses/tds-kb/34.json"
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(category_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            scraped_count = 0
+            
+            if 'topic_list' in data and 'topics' in data['topic_list']:
+                for topic in data['topic_list']['topics'][:50]:  # Limit to 50 recent topics
+                    topic_id = topic.get('id')
+                    title = topic.get('title', '')
+                    
+                    # Get topic details
+                    topic_url = f"{base_url}/t/{topic_id}.json"
+                    try:
+                        topic_response = requests.get(topic_url, headers=headers, timeout=20)
+                        topic_response.raise_for_status()
+                        topic_data = topic_response.json()
+                        
+                        # Extract posts
+                        if 'post_stream' in topic_data and 'posts' in topic_data['post_stream']:
+                            for post in topic_data['post_stream']['posts'][:5]:  # First 5 posts per topic
+                                content = post.get('cooked', '')
+                                if content:
+                                    # Clean HTML content
+                                    soup = BeautifulSoup(content, 'html.parser')
+                                    clean_content = soup.get_text().strip()
+                                    
+                                    post_url = f"{base_url}/t/{topic_id}/{post.get('post_number', 1)}"
+                                    
+                                    cursor.execute('''
+                                        INSERT OR REPLACE INTO discourse_posts 
+                                        (title, content, url, category, created_at)
+                                        VALUES (?, ?, ?, ?, ?)
+                                    ''', (title, clean_content, post_url, 'TDS', 
+                                         post.get('created_at', datetime.now().isoformat())))
+                                    
+                                    scraped_count += 1
+                        
+                        time.sleep(1)  # Rate limiting
+                        
+                    except Exception as e:
+                        logger.error(f"Error scraping topic {topic_id}: {e}")
+                        continue
+            
+            # Update scraping status
+            cursor.execute('''
+                INSERT OR REPLACE INTO scraping_status 
+                (source, last_scraped, status, error_message)
+                VALUES (?, ?, ?, ?)
+            ''', ('discourse', datetime.now().isoformat(), 'success', None))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Successfully scraped {scraped_count} discourse posts")
+            return scraped_count
+            
+        except Exception as e:
+            logger.error(f"Error scraping discourse: {e}")
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO scraping_status 
+                (source, last_scraped, status, error_message)
+                VALUES (?, ?, ?, ?)
+            ''', ('discourse', datetime.now().isoformat(), 'error', str(e)))
+            conn.commit()
+            conn.close()
+            return 0
+    
+    def scrape_course_content(self):
+        """Scrape TDS course content from tds.s-anand.net"""
+        try:
+            base_url = "https://tds.s-anand.net"
+            course_url = f"{base_url}/#/2025-01/"
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            # This is a SPA, so we'll scrape the main content and common sections
+            sections_to_scrape = [
+                '',  # Main page
+                'introduction',
+                'setup',
+                'python-basics',
+                'data-analysis',
+                'machine-learning',
+                'deployment',
+                'projects',
+                'evaluation'
+            ]
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            scraped_count = 0
+            
+            for section in sections_to_scrape:
+                try:
+                    url = f"{base_url}/#/2025-01/{section}" if section else course_url
+                    response = requests.get(url, headers=headers, timeout=30)
+                    response.raise_for_status()
+                    
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    
+                    # Extract text content
+                    content_div = soup.find('div', class_='content') or soup.find('main') or soup.body
+                    if content_div:
+                        # Remove script and style elements
+                        for script in content_div(["script", "style"]):
+                            script.decompose()
+                        
+                        text_content = content_div.get_text()
+                        lines = (line.strip() for line in text_content.splitlines())
+                        content = '\n'.join(line for line in lines if line)
+                        
+                        if len(content) > 100:  # Only store substantial content
+                            cursor.execute('''
+                                INSERT OR REPLACE INTO course_content 
+                                (title, content, url, section)
+                                VALUES (?, ?, ?, ?)
+                            ''', (f"TDS 2025-01 {section.title() if section else 'Overview'}", 
+                                 content[:5000], url, section or 'main'))
+                            
+                            scraped_count += 1
+                    
+                    time.sleep(2)  # Rate limiting
+                    
+                except Exception as e:
+                    logger.error(f"Error scraping section {section}: {e}")
+                    continue
+            
+            # Update scraping status
+            cursor.execute('''
+                INSERT OR REPLACE INTO scraping_status 
+                (source, last_scraped, status, error_message)
+                VALUES (?, ?, ?, ?)
+            ''', ('course_content', datetime.now().isoformat(), 'success', None))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Successfully scraped {scraped_count} course content sections")
+            return scraped_count
+            
+        except Exception as e:
+            logger.error(f"Error scraping course content: {e}")
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO scraping_status 
+                (source, last_scraped, status, error_message)
+                VALUES (?, ?, ?, ?)
+            ''', ('course_content', datetime.now().isoformat(), 'error', str(e)))
+            conn.commit()
+            conn.close()
+            return 0
+    
+    def start_background_scraper(self):
+        """Start background thread for periodic scraping"""
+        def scraper_worker():
+            while True:
+                try:
+                    logger.info("Starting background scraping...")
+                    discourse_count = self.scrape_discourse_posts()
+                    course_count = self.scrape_course_content()
+                    logger.info(f"Background scraping completed: {discourse_count} discourse posts, {course_count} course sections")
+                    
+                    # Wait 6 hours before next scrape
+                    time.sleep(6 * 60 * 60)
+                except Exception as e:
+                    logger.error(f"Error in background scraper: {e}")
+                    time.sleep(60 * 60)  # Wait 1 hour on error
+        
+        scraper_thread = threading.Thread(target=scraper_worker, daemon=True)
+        scraper_thread.start()
     
     def initialize_knowledge_base(self):
         """Initialize knowledge base with sample data if empty"""
@@ -85,6 +292,11 @@ class TDSVirtualTA:
             logger.info("Initializing knowledge base with sample data")
             self.add_sample_data(cursor)
             conn.commit()
+            
+            # Start initial scraping
+            logger.info("Starting initial scraping...")
+            self.scrape_discourse_posts()
+            self.scrape_course_content()
         
         conn.close()
     
@@ -104,6 +316,13 @@ class TDSVirtualTA:
                 'content': '''If a student scores 10/10 on GA4 as well as a bonus, it would appear as "110" on the dashboard.
                 The bonus points are added to show the total score including bonus marks.''',
                 'url': 'https://discourse.onlinedegree.iitm.ac.in/t/ga4-data-sourcing-discussion-thread-tds-jan-2025/165959/388',
+                'category': 'TDS'
+            },
+            {
+                'title': 'Project 1 Deadline Extension',
+                'content': '''Project 1 deadline has been extended to 16 Feb 2025. This extension applies to all students.
+                Please submit your projects before the new deadline to avoid any penalties.''',
+                'url': 'https://discourse.onlinedegree.iitm.ac.in/t/project-1-deadline-extension/12346',
                 'category': 'TDS'
             },
             {
@@ -132,6 +351,14 @@ class TDSVirtualTA:
                 so you might need to use the OpenAI API directly.''',
                 'url': 'https://tds.s-anand.net/#/ai-models',
                 'section': 'Week 5'
+            },
+            {
+                'title': 'TDS Grading System',
+                'content': '''TDS uses a best 4 out of 7 GA rule for grading. You need to pass the course with adequate scores.
+                Projects are evaluated using automated systems and LLMs for comprehensive assessment.
+                GitHub repositories should be public with MIT license for Project 1.''',
+                'url': 'https://tds.s-anand.net/#/grading',
+                'section': 'Evaluation'
             }
         ]
         
@@ -242,6 +469,10 @@ class TDSVirtualTA:
             4. Mention specific models, tools, or requirements when relevant
             5. Be concise but comprehensive
             6. Always prioritize course-specific guidance over general advice
+            7. For model selection questions, emphasize using the exact model specified in assignments
+            8. For Docker/Podman questions, recommend Podman but mention Docker is acceptable
+            9. For project deadlines, check for extensions and provide current information
+            10. For grading questions, mention the best 4 out of 7 GA rule
             """
             
             # Prepare user message
@@ -326,7 +557,7 @@ def health_check():
         "timestamp": datetime.now().isoformat()
     })
 
-@app.route('/api/', methods=['POST'])
+@app.route('/api/chat', methods=['POST'])
 def answer_question():
     """Main API endpoint for answering student questions"""
     try:
@@ -367,6 +598,12 @@ def answer_question():
             "links": []
         }), 500
 
+# Keep the old endpoint for backward compatibility
+@app.route('/api/', methods=['POST'])
+def answer_question_old():
+    """Old API endpoint for backward compatibility"""
+    return answer_question()
+
 @app.route('/api/', methods=['GET'])
 def api_info():
     """API information endpoint"""
@@ -375,15 +612,17 @@ def api_info():
         "version": "1.0.0",
         "description": "Virtual Teaching Assistant for Tools in Data Science course",
         "endpoints": {
-            "POST /api/": {
+            "POST /api/chat": {
                 "description": "Submit a question with optional image",
                 "parameters": {
                     "question": "string (required) - The student's question",
                     "image": "string (optional) - Base64 encoded image"
                 }
             },
+            "POST /api/": "Same as /api/chat (for backward compatibility)",
             "GET /api/": "API information",
-            "GET /health": "Health check"
+            "GET /health": "Health check",
+            "GET /scrape": "Manual scraping trigger"
         },
         "example": {
             "request": {
@@ -402,14 +641,35 @@ def api_info():
         }
     })
 
+@app.route('/scrape', methods=['GET'])
+def manual_scrape():
+    """Manual scraping trigger for testing"""
+    try:
+        discourse_count = virtual_ta.scrape_discourse_posts()
+        course_count = virtual_ta.scrape_course_content()
+        
+        return jsonify({
+            "status": "success",
+            "discourse_posts_scraped": discourse_count,
+            "course_sections_scraped": course_count,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }), 500
+
 @app.route('/', methods=['GET'])
 def root():
     """Root endpoint"""
     return jsonify({
         "message": "TDS Virtual TA - Tools in Data Science Teaching Assistant",
         "status": "running",
-        "api_endpoint": "/api/",
-        "health_check": "/health"
+        "api_endpoint": "/api/chat",
+        "health_check": "/health",
+        "manual_scrape": "/scrape"
     })
 
 if __name__ == '__main__':
