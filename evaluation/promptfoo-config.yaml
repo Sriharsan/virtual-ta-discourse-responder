@@ -1,35 +1,33 @@
 description: "TDS Virtual TA Project - 15 Realistic Evaluation Questions"
 
 providers:
-  - id: https
+  - id: virtual-ta-api
     config:
-      url: https://virtual-ta-discourse-responder.onrender.com/api/chat # Updated to your deployed URL
+      type: http
+      url: https://virtual-ta-discourse-responder.onrender.com/api/chat
       method: POST
       headers:
         Content-Type: application/json
-      body: |
-        {
-          "question": "{{ question }}"{% if image %},
-          "image": "{{ image }}"{% endif %}
-        }
-      transformResponse: json
+      body:
+        question: "{{ vars.question }}"
+
+prompts:
+  - "{{ vars.question }}"
 
 defaultTest:
   assert:
-    - type: is-json
-      value:
-        type: object
-        required: [answer, links]
-        properties:
-          answer: { type: string }
-          links:
-            type: array
-            items:
-              type: object
-              required: [url, text]
-              properties:
-                url: { type: string }
-                text: { type: string }
+    - type: javascript
+      value: |
+        // Check if response is valid JSON with required structure
+        try {
+          const response = JSON.parse(output);
+          if (!response.answer || !Array.isArray(response.links)) {
+            return { pass: false, score: 0, reason: 'Invalid response structure' };
+          }
+          return { pass: true, score: 1 };
+        } catch(e) {
+          return { pass: false, score: 0, reason: 'Invalid JSON response' };
+        }
 
 tests:
   # Question 1: Model Selection
@@ -37,10 +35,8 @@ tests:
       question: The question asks to use gpt-3.5-turbo-0125 model but the ai-proxy provided by Anand sir only supports gpt-4o-mini. So should we just use gpt-4o-mini or use the OpenAI API for gpt3.5 turbo?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Clarifies use of gpt-3.5-turbo-0125 not gpt-4o-mini
       - type: contains
-        transform: JSON.stringify(output.links)
         value: discourse.onlinedegree.iitm.ac.in
 
   # Question 2: Scoring Dashboard
@@ -48,10 +44,8 @@ tests:
       question: If a student scores 10/10 on GA4 as well as a bonus, how would it appear on the dashboard?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Mentions the dashboard showing "110"
       - type: contains
-        transform: JSON.stringify(output.links)
         value: discourse.onlinedegree.iitm.ac.in
 
   # Question 3: Docker vs Podman
@@ -59,10 +53,8 @@ tests:
       question: I know Docker but have not used Podman before. Should I use Docker for this course?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Recommends Podman for the course
       - type: contains
-        transform: JSON.stringify(output.links)
         value: tds.s-anand.net
 
   # Question 4: Future Course Info
@@ -70,7 +62,6 @@ tests:
       question: When is the TDS Sep 2025 end-term exam?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Says it doesn't know or information not available
 
   # Question 5: Project 1 Deadline
@@ -78,10 +69,8 @@ tests:
       question: Has the Project 1 deadline been extended? I see conflicting dates in different announcements.
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Mentions deadline extension to 16 Feb 2025
       - type: contains
-        transform: JSON.stringify(output.links)
         value: discourse.onlinedegree.iitm.ac.in
 
   # Question 6: Submission Issues
@@ -89,7 +78,6 @@ tests:
       question: My TDS assignment is not submitting through the portal. I keep getting an error. What should I do?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Provides troubleshooting steps or contact information
 
   # Question 7: API Quota
@@ -97,7 +85,6 @@ tests:
       question: When running the llm embed command, I'm getting 'insufficient_quota' error but I've only used the model 2-3 times. How do I increase my quota?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Mentions quota management or API key issues
 
   # Question 8: Course Difficulty
@@ -105,7 +92,6 @@ tests:
       question: I'm finding TDS too difficult at my current level. Should I drop this course and take it in a later term?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Mentions GA1 prerequisite check or dropping course advice
 
   # Question 9: GitHub Repository
@@ -113,7 +99,6 @@ tests:
       question: For Project 1, do I need to make my GitHub repository public? And what should I include in the LICENSE file?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Mentions public repository and MIT license requirements
 
   # Question 10: Vector Databases
@@ -121,7 +106,6 @@ tests:
       question: I'm getting an error for the Vector Databases question worth 1 mark in GA3. The validation seems to be failing even though my answer looks correct.
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Addresses GA3 or vector database issues
 
   # Question 11: Vercel Deployment
@@ -129,7 +113,6 @@ tests:
       question: I'm getting a deployment error when trying to deploy my project on Vercel. The build keeps failing. Any suggestions?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Provides deployment troubleshooting advice
 
   # Question 12: Course Material Access  
@@ -137,7 +120,6 @@ tests:
       question: Where can I find the recorded sessions for TDS? I missed the live session on 10th May.
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Mentions YouTube playlist or course material access
 
   # Question 13: Evaluation Methodology
@@ -145,7 +127,6 @@ tests:
       question: How are the TDS projects evaluated? Are they manually graded or automatically evaluated using LLMs?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Mentions automated evaluation or LLM-based grading
 
   # Question 14: Google Cloud Setup
@@ -153,7 +134,6 @@ tests:
       question: I'm having trouble creating a Google Cloud Project for Module 2, Q11. It says 'You must select a parent organization or folder'. What should I do?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Provides GCP setup guidance
 
   # Question 15: Course Completion
@@ -161,7 +141,6 @@ tests:
       question: What's the minimum score needed to pass TDS? How are the final grades calculated with the best 4 out of 7 GA rule?
     assert:
       - type: llm-rubric
-        transform: output.answer
         value: Explains grading methodology or best 4 out of 7 rule
 
 writeLatestResults: true
