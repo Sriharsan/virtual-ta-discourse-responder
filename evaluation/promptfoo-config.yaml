@@ -9,7 +9,7 @@ providers:
   - id: virtual-ta-api
     config:
       type: http
-      url: https://virtual-ta-discourse-responder.onrender.com/api/chat
+      url: https://virtual-ta-discourse-responder.onrender.com/api
       method: POST
       headers:
         Content-Type: application/json
