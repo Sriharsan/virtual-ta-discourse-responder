@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-Enhanced TDS Discourse Scraper
-Scrapes posts from Tools in Data Science Discourse forum for specified date range
+Public Discourse Scraper - No Authentication Required
+Scrapes TDS Discourse posts using public HTML endpoints and web scraping
 """
 
 import argparse
 import json
-import sqlite3
 import requests
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import time
 import logging
 from typing import List, Dict, Optional
 import re
 from urllib.parse import urljoin, urlparse
+import sqlite3
 
 # Configure logging
 logging.basicConfig(
@@ -22,208 +23,415 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class TDSDiscourseScraper:
-    def __init__(self, base_url: str, api_key: str = None, username: str = None):
+class PublicDiscourseScraper:
+    def __init__(self, base_url: str):
         """
-        Initialize the Discourse scraper
+        Initialize the public Discourse scraper
         
         Args:
             base_url: Base URL of the Discourse forum
-            api_key: Optional API key for authenticated requests
-            username: Optional username for authenticated requests
         """
         self.base_url = base_url.rstrip('/')
-        self.api_key = api_key
-        self.username = username
         self.session = requests.Session()
         
-        # Set headers for API requests
-        if api_key and username:
-            self.session.headers.update({
-                'Api-Key': api_key,
-                'Api-Username': username,
-                'User-Agent': 'TDS-Discourse-Scraper/1.0'
-            })
-        else:
-            self.session.headers.update({
-                'User-Agent': 'TDS-Discourse-Scraper/1.0'
-            })
+        # Set headers to mimic a regular browser
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        })
     
-    def get_categories(self) -> Dict[str, int]:
-        """Get all categories and their IDs"""
-        try:
-            response = self.session.get(f"{self.base_url}/categories.json")
-            response.raise_for_status()
-            data = response.json()
-            
-            categories = {}
-            for category in data.get('category_list', {}).get('categories', []):
-                categories[category['name']] = category['id']
-            
-            logger.info(f"Retrieved {len(categories)} categories")
-            return categories
-        except Exception as e:
-            logger.error(f"Error fetching categories: {e}")
-            return {}
-    
-    def get_topics_for_category(self, category_id: int, start_date: datetime, end_date: datetime) -> List[Dict]:
-        """Get all topics for a specific category within date range"""
+    def discover_tds_topics(self, start_date: datetime, end_date: datetime) -> List[Dict]:
+        """Discover TDS-related topics by scraping public pages"""
         topics = []
-        page = 0
         
-        while True:
+        # Try different public endpoints
+        endpoints_to_try = [
+            '/latest',
+            '/top',
+            '/categories',
+            '/',
+        ]
+        
+        for endpoint in endpoints_to_try:
             try:
-                # Use the category endpoint to get topics
-                url = f"{self.base_url}/c/{category_id}.json"
-                params = {'page': page}
+                logger.info(f"Trying endpoint: {endpoint}")
+                page_topics = self._scrape_topics_from_page(endpoint, start_date, end_date)
+                topics.extend(page_topics)
                 
-                response = self.session.get(url, params=params)
-                response.raise_for_status()
-                data = response.json()
+                if len(page_topics) > 0:
+                    logger.info(f"Found {len(page_topics)} topics from {endpoint}")
                 
-                topic_list = data.get('topic_list', {}).get('topics', [])
-                
-                if not topic_list:
-                    break
-                
-                # Filter topics by date
-                filtered_topics = []
-                for topic in topic_list:
-                    created_at = datetime.fromisoformat(topic['created_at'].replace('Z', '+00:00'))
-                    created_at = created_at.replace(tzinfo=None)  # Remove timezone for comparison
-                    
-                    if start_date <= created_at <= end_date:
-                        filtered_topics.append(topic)
-                    elif created_at < start_date:
-                        # Topics are usually sorted by date, so we can break early
-                        logger.info(f"Reached topics older than start date, stopping pagination")
-                        return topics
-                
-                topics.extend(filtered_topics)
-                
-                # Check if we've reached the end
-                if len(topic_list) < 30:  # Discourse typically returns 30 topics per page
-                    break
-                
-                page += 1
-                time.sleep(0.5)  # Rate limiting
+                time.sleep(1)  # Rate limiting
                 
             except Exception as e:
-                logger.error(f"Error fetching topics for category {category_id}, page {page}: {e}")
-                break
+                logger.warning(f"Error scraping {endpoint}: {e}")
+                continue
         
-        logger.info(f"Retrieved {len(topics)} topics for category {category_id}")
-        return topics
+        # Remove duplicates
+        seen_ids = set()
+        unique_topics = []
+        for topic in topics:
+            if topic['id'] not in seen_ids:
+                unique_topics.append(topic)
+                seen_ids.add(topic['id'])
+        
+        logger.info(f"Total unique topics found: {len(unique_topics)}")
+        return unique_topics
     
-    def get_topic_posts(self, topic_id: int) -> Dict:
-        """Get all posts for a specific topic"""
+    def _scrape_topics_from_page(self, endpoint: str, start_date: datetime, end_date: datetime) -> List[Dict]:
+        """Scrape topics from a specific page"""
+        topics = []
+        
         try:
-            response = self.session.get(f"{self.base_url}/t/{topic_id}.json")
+            url = f"{self.base_url}{endpoint}"
+            response = self.session.get(url, timeout=15)
             response.raise_for_status()
-            data = response.json()
             
-            # Extract relevant information
-            topic_info = {
-                'id': topic_id,
-                'title': data.get('title', ''),
-                'category_id': data.get('category_id'),
-                'created_at': data.get('created_at'),
-                'posts': []
-            }
+            soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Get all posts
-            for post in data.get('post_stream', {}).get('posts', []):
-                post_data = {
-                    'id': post.get('id'),
-                    'post_number': post.get('post_number'),
-                    'created_at': post.get('created_at'),
-                    'updated_at': post.get('updated_at'),
-                    'username': post.get('username'),
-                    'content': self.clean_html(post.get('cooked', '')),
-                    'raw_content': post.get('raw', ''),
-                    'reply_count': post.get('reply_count', 0),
-                    'like_count': post.get('actions_summary', [{}])[0].get('count', 0) if post.get('actions_summary') else 0
-                }
-                topic_info['posts'].append(post_data)
+            # Look for topic links in various formats
+            topic_selectors = [
+                'a[href*="/t/"]',  # Standard topic links
+                '.topic-list-item a',  # Topic list items
+                '.topic-title a',  # Topic titles
+                'tr.topic-list-item',  # Table rows
+            ]
             
-            time.sleep(0.3)  # Rate limiting
-            return topic_info
+            for selector in topic_selectors:
+                elements = soup.select(selector)
+                
+                for element in elements:
+                    try:
+                        topic_data = self._extract_topic_from_element(element, start_date, end_date)
+                        if topic_data and self._is_tds_related(topic_data['title']):
+                            topics.append(topic_data)
+                    except Exception as e:
+                        continue
+            
+            # Also try to find topics in JavaScript data
+            script_topics = self._extract_topics_from_scripts(soup, start_date, end_date)
+            topics.extend(script_topics)
             
         except Exception as e:
-            logger.error(f"Error fetching posts for topic {topic_id}: {e}")
+            logger.error(f"Error scraping page {endpoint}: {e}")
+        
+        return topics
+    
+    def _extract_topic_from_element(self, element, start_date: datetime, end_date: datetime) -> Optional[Dict]:
+        """Extract topic data from HTML element"""
+        try:
+            # Get the link
+            if element.name == 'a':
+                link = element.get('href', '')
+                title = element.get_text(strip=True)
+            else:
+                link_elem = element.find('a', href=re.compile(r'/t/'))
+                if not link_elem:
+                    return None
+                link = link_elem.get('href', '')
+                title = link_elem.get_text(strip=True)
+            
+            if not link or not title:
+                return None
+            
+            # Extract topic ID from URL
+            topic_id_match = re.search(r'/t/[^/]+/(\d+)', link)
+            if not topic_id_match:
+                return None
+            
+            topic_id = int(topic_id_match.group(1))
+            
+            # Try to find date information
+            date_elem = element.find_parent().find(class_=re.compile(r'date|time|created')) if element.find_parent() else None
+            created_at = None
+            
+            if date_elem:
+                date_text = date_elem.get('title') or date_elem.get_text(strip=True)
+                created_at = self._parse_date(date_text)
+            
+            # If no date found, we'll check it later by fetching the topic
+            if not created_at:
+                created_at = datetime.now()  # Placeholder
+            
+            return {
+                'id': topic_id,
+                'title': title,
+                'url': urljoin(self.base_url, link),
+                'created_at': created_at
+            }
+            
+        except Exception as e:
             return None
     
-    def clean_html(self, html_content: str) -> str:
-        """Clean HTML content to extract plain text"""
-        # Remove HTML tags
-        clean_text = re.sub(r'<[^>]+>', '', html_content)
-        # Decode HTML entities
-        clean_text = clean_text.replace('&nbsp;', ' ')
-        clean_text = clean_text.replace('&lt;', '<')
-        clean_text = clean_text.replace('&gt;', '>')
-        clean_text = clean_text.replace('&amp;', '&')
-        # Clean up whitespace
-        clean_text = ' '.join(clean_text.split())
-        return clean_text
+    def _extract_topics_from_scripts(self, soup, start_date: datetime, end_date: datetime) -> List[Dict]:
+        """Extract topics from JavaScript data in page"""
+        topics = []
+        
+        try:
+            # Look for Discourse's JSON data in script tags
+            script_tags = soup.find_all('script')
+            
+            for script in script_tags:
+                if script.string and ('topic_list' in script.string or 'topics' in script.string):
+                    # Try to extract JSON data
+                    content = script.string
+                    
+                    # Look for topic data patterns
+                    topic_matches = re.findall(r'"id":(\d+).*?"title":"([^"]+)".*?"created_at":"([^"]+)"', content)
+                    
+                    for match in topic_matches:
+                        try:
+                            topic_id = int(match[0])
+                            title = match[1]
+                            created_at_str = match[2]
+                            
+                            created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                            created_at = created_at.replace(tzinfo=None)
+                            
+                            if start_date <= created_at <= end_date and self._is_tds_related(title):
+                                topics.append({
+                                    'id': topic_id,
+                                    'title': title,
+                                    'url': f"{self.base_url}/t/{topic_id}",
+                                    'created_at': created_at
+                                })
+                        except:
+                            continue
+        except Exception as e:
+            logger.warning(f"Error extracting from scripts: {e}")
+        
+        return topics
     
-    def scrape_posts(self, start_date: str, end_date: str, categories: List[str] = None) -> List[Dict]:
-        """
-        Scrape posts from specified categories within date range
+    def _is_tds_related(self, title: str) -> bool:
+        """Check if topic title is related to Tools in Data Science"""
+        if not title:
+            return False
+            
+        title_lower = title.lower()
         
-        Args:
-            start_date: Start date in YYYY-MM-DD format
-            end_date: End date in YYYY-MM-DD format
-            categories: List of category names to scrape (default: all categories)
+        # TDS-related keywords
+        tds_keywords = [
+            'tools', 'data', 'science', 'tds', 'assignment', 'project', 'graded',
+            'python', 'pandas', 'numpy', 'matplotlib', 'jupyter', 'notebook',
+            'ga1', 'ga2', 'ga3', 'ga4', 'ga5', 'ga6', 'ga7', 'ga8', 'ga9', 'ga10',
+            'graded assignment', 'programming', 'coding', 'dataset', 'analysis',
+            'visualization', 'machine learning', 'ml', 'statistics', 'csv',
+            'dataframe', 'plot', 'graph', 'chart', 'regression', 'classification'
+        ]
         
-        Returns:
-            List of scraped posts
-        """
+        # Check if any keyword is present
+        return any(keyword in title_lower for keyword in tds_keywords)
+    
+    def _parse_date(self, date_str: str) -> Optional[datetime]:
+        """Parse date string in various formats"""
+        if not date_str:
+            return None
+        
+        # Common date formats
+        formats = [
+            '%Y-%m-%dT%H:%M:%S.%fZ',
+            '%Y-%m-%dT%H:%M:%SZ',
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d',
+            '%d/%m/%Y',
+            '%m/%d/%Y',
+        ]
+        
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str, fmt)
+            except:
+                continue
+        
+        # Try relative dates
+        if 'ago' in date_str.lower():
+            # Simple relative date parsing
+            if 'hour' in date_str:
+                hours = re.search(r'(\d+)', date_str)
+                if hours:
+                    return datetime.now() - timedelta(hours=int(hours.group(1)))
+            elif 'day' in date_str:
+                days = re.search(r'(\d+)', date_str)
+                if days:
+                    return datetime.now() - timedelta(days=int(days.group(1)))
+        
+        return None
+    
+    def scrape_topic_posts(self, topic_url: str) -> List[Dict]:
+        """Scrape posts from a specific topic using HTML parsing"""
+        posts = []
+        
+        try:
+            response = self.session.get(topic_url, timeout=15)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Extract topic title
+            title_elem = soup.find('h1') or soup.find(class_=re.compile(r'title'))
+            topic_title = title_elem.get_text(strip=True) if title_elem else 'Unknown Title'
+            
+            # Find post elements
+            post_selectors = [
+                '.topic-post',
+                '.post',
+                'article[data-post-id]',
+                '.cooked',
+            ]
+            
+            post_elements = []
+            for selector in post_selectors:
+                elements = soup.select(selector)
+                if elements:
+                    post_elements = elements
+                    break
+            
+            for i, post_elem in enumerate(post_elements):
+                try:
+                    post_data = self._extract_post_from_element(post_elem, topic_title, topic_url, i + 1)
+                    if post_data:
+                        posts.append(post_data)
+                except Exception as e:
+                    logger.warning(f"Error extracting post: {e}")
+                    continue
+            
+            # If no posts found with structured parsing, try simpler extraction
+            if not posts:
+                posts = self._extract_posts_simple(soup, topic_title, topic_url)
+            
+            time.sleep(0.5)  # Rate limiting
+            
+        except Exception as e:
+            logger.error(f"Error scraping topic {topic_url}: {e}")
+        
+        return posts
+    
+    def _extract_post_from_element(self, post_elem, topic_title: str, topic_url: str, post_number: int) -> Optional[Dict]:
+        """Extract post data from HTML element"""
+        try:
+            # Extract content
+            content_elem = post_elem.find(class_=re.compile(r'cooked|content|post-content'))
+            if not content_elem:
+                content_elem = post_elem
+            
+            content = content_elem.get_text(strip=True)
+            
+            # Extract username
+            username_elem = post_elem.find(class_=re.compile(r'username|author|user'))
+            username = username_elem.get_text(strip=True) if username_elem else 'Unknown User'
+            
+            # Extract post ID if available
+            post_id = post_elem.get('data-post-id') or post_elem.get('id')
+            if post_id:
+                post_id = re.search(r'\d+', str(post_id))
+                post_id = int(post_id.group()) if post_id else post_number
+            else:
+                post_id = post_number
+            
+            # Extract date if available
+            date_elem = post_elem.find(class_=re.compile(r'date|time|created'))
+            created_at = None
+            if date_elem:
+                date_text = date_elem.get('title') or date_elem.get_text(strip=True)
+                created_at = self._parse_date(date_text)
+            
+            if not created_at:
+                created_at = datetime.now()
+            
+            return {
+                'id': post_id,
+                'post_number': post_number,
+                'topic_title': topic_title,
+                'category': 'Tools in Data Science',
+                'username': username,
+                'content': content,
+                'raw_content': content,
+                'created_at': created_at.isoformat(),
+                'updated_at': created_at.isoformat(),
+                'topic_url': topic_url,
+                'post_url': f"{topic_url}/{post_number}",
+                'reply_count': 0,
+                'like_count': 0
+            }
+            
+        except Exception as e:
+            return None
+    
+    def _extract_posts_simple(self, soup, topic_title: str, topic_url: str) -> List[Dict]:
+        """Simple post extraction as fallback"""
+        posts = []
+        
+        try:
+            # Find all text content that looks like posts
+            text_elements = soup.find_all(['p', 'div'], string=re.compile(r'.{50,}'))  # At least 50 characters
+            
+            for i, elem in enumerate(text_elements[:20]):  # Limit to first 20 to avoid noise
+                content = elem.get_text(strip=True)
+                
+                if len(content) > 50 and content not in [p.get('content', '') for p in posts]:
+                    posts.append({
+                        'id': i + 1,
+                        'post_number': i + 1,
+                        'topic_title': topic_title,
+                        'category': 'Tools in Data Science',
+                        'username': 'Unknown User',
+                        'content': content,
+                        'raw_content': content,
+                        'created_at': datetime.now().isoformat(),
+                        'updated_at': datetime.now().isoformat(),
+                        'topic_url': topic_url,
+                        'post_url': f"{topic_url}/{i + 1}",
+                        'reply_count': 0,
+                        'like_count': 0
+                    })
+        except Exception as e:
+            logger.warning(f"Error in simple extraction: {e}")
+        
+        return posts
+    
+    def scrape_posts(self, start_date: str, end_date: str) -> List[Dict]:
+        """Main scraping method"""
         # Parse dates
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-        end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)  # Include end date
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
         
-        logger.info(f"Scraping posts from {start_date} to {end_date}")
+        logger.info(f"Scraping TDS posts from {start_date} to {end_date}")
+        logger.info("Using public HTML scraping (no authentication required)")
         
-        # Get categories
-        all_categories = self.get_categories()
-        target_categories = {}
+        # Discover TDS topics
+        topics = self.discover_tds_topics(start_dt, end_dt)
         
-        if categories:
-            for cat_name in categories:
-                if cat_name in all_categories:
-                    target_categories[cat_name] = all_categories[cat_name]
-                else:
-                    logger.warning(f"Category '{cat_name}' not found")
-        else:
-            target_categories = all_categories
+        if not topics:
+            logger.warning("No topics found. The forum might be fully private or have different structure.")
+            return []
         
-        logger.info(f"Target categories: {list(target_categories.keys())}")
-        
-        # Scrape posts from each category
+        # Scrape posts from each topic
         all_posts = []
         
-        for cat_name, cat_id in target_categories.items():
-            logger.info(f"Scraping category: {cat_name} (ID: {cat_id})")
+        for topic in topics:
+            logger.info(f"Scraping topic: {topic['title']}")
+            posts = self.scrape_topic_posts(topic['url'])
+            all_posts.extend(posts)
             
-            # Get topics for this category
-            topics = self.get_topics_for_category(cat_id, start_dt, end_dt)
-            
-            # Get posts for each topic
-            for topic in topics:
-                topic_data = self.get_topic_posts(topic['id'])
-                if topic_data:
-                    # Add category name and URL to each post
-                    for post in topic_data['posts']:
-                        post['topic_title'] = topic_data['title']
-                        post['category'] = cat_name
-                        post['topic_url'] = f"{self.base_url}/t/{topic['id']}"
-                        post['post_url'] = f"{self.base_url}/t/{topic['id']}/{post['post_number']}"
-                        all_posts.append(post)
-            
-            logger.info(f"Scraped {len([p for p in all_posts if p['category'] == cat_name])} posts from {cat_name}")
+            time.sleep(1)  # Rate limiting between topics
         
-        logger.info(f"Total posts scraped: {len(all_posts)}")
-        return all_posts
+        # Filter posts by date
+        filtered_posts = []
+        for post in all_posts:
+            try:
+                post_date = datetime.fromisoformat(post['created_at'].replace('Z', ''))
+                if start_dt <= post_date <= end_dt:
+                    filtered_posts.append(post)
+            except:
+                # Include posts where we can't parse the date
+                filtered_posts.append(post)
+        
+        logger.info(f"Total posts scraped: {len(filtered_posts)}")
+        return filtered_posts
     
     def save_to_json(self, posts: List[Dict], filename: str):
         """Save posts to JSON file"""
@@ -240,7 +448,6 @@ class TDSDiscourseScraper:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             
-            # Create table if it doesn't exist
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS discourse_posts (
                     id INTEGER PRIMARY KEY,
@@ -259,7 +466,6 @@ class TDSDiscourseScraper:
                 )
             ''')
             
-            # Insert posts
             for post in posts:
                 cursor.execute('''
                     INSERT OR REPLACE INTO discourse_posts 
@@ -281,23 +487,20 @@ class TDSDiscourseScraper:
             logger.error(f"Error saving to database: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description='Scrape TDS Discourse posts')
+    parser = argparse.ArgumentParser(description='Scrape TDS Discourse posts (no auth required)')
     parser.add_argument('--url', required=True, help='Discourse base URL')
     parser.add_argument('--start-date', required=True, help='Start date (YYYY-MM-DD)')
     parser.add_argument('--end-date', required=True, help='End date (YYYY-MM-DD)')
-    parser.add_argument('--api-key', help='Discourse API key (optional)')
-    parser.add_argument('--username', help='Discourse username (optional)')
-    parser.add_argument('--categories', nargs='+', help='Category names to scrape')
     parser.add_argument('--output-json', help='Output JSON file path')
     parser.add_argument('--db-path', help='SQLite database file path')
     
     args = parser.parse_args()
     
     # Initialize scraper
-    scraper = TDSDiscourseScraper(args.url, args.api_key, args.username)
+    scraper = PublicDiscourseScraper(args.url)
     
     # Scrape posts
-    posts = scraper.scrape_posts(args.start_date, args.end_date, args.categories)
+    posts = scraper.scrape_posts(args.start_date, args.end_date)
     
     # Save results
     if args.output_json:
@@ -307,22 +510,15 @@ def main():
         scraper.save_to_database(posts, args.db_path)
     
     if not args.output_json and not args.db_path:
-        # Print summary if no output specified
         print(f"\nScraping Summary:")
         print(f"Total posts: {len(posts)}")
         print(f"Date range: {args.start_date} to {args.end_date}")
         
-        # Group by category
-        categories = {}
-        for post in posts:
-            cat = post['category']
-            if cat not in categories:
-                categories[cat] = 0
-            categories[cat] += 1
-        
-        print("\nPosts by category:")
-        for cat, count in categories.items():
-            print(f"  {cat}: {count}")
+        if posts:
+            print("\nSample topics found:")
+            topics = list(set([post['topic_title'] for post in posts[:10]]))
+            for topic in topics:
+                print(f"  - {topic}")
 
 if __name__ == "__main__":
     main()
