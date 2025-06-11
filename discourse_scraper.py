@@ -1,550 +1,618 @@
 #!/usr/bin/env python3
 """
-Discourse Scraper Script for TDS Course
-Scrapes posts from Discourse TDS forum within specified date range
-Usage: python discourse_scraper.py --start-date 2025-01-01 --end-date 2025-02-01
+Enhanced Discourse Forum Scraper with comprehensive error handling and testing capabilities.
 """
 
-import requests
-import json
 import argparse
-from datetime import datetime, timezone
+import json
 import csv
-import os
-from urllib.parse import urljoin
+import requests
+from datetime import datetime, timedelta
 import time
-import random
+from typing import Dict, List, Optional, Any
+import logging
+from dataclasses import dataclass, asdict
+from urllib.parse import urljoin, urlparse
+import sys
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('discourse_scraper.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+@dataclass
+class Post:
+    """Data class representing a forum post"""
+    id: int
+    topic_id: int
+    username: str
+    name: str
+    created_at: str
+    raw: str
+    cooked: str
+    reply_count: int
+    like_count: int
+    topic_title: str
+    category_name: str
+    category_id: int
+    trust_level: int
+    user_id: int
+    post_number: int
+    reply_to_post_number: Optional[int] = None
+    user_title: Optional[str] = None
+    moderator: bool = False
+    admin: bool = False
+    staff: bool = False
+    primary_group_name: Optional[str] = None
+    flair_name: Optional[str] = None
+    avatar_template: Optional[str] = None
+
+@dataclass
+class Topic:
+    """Data class representing a forum topic"""
+    id: int
+    title: str
+    category_id: int
+    category_name: str
+    created_at: str
+    last_posted_at: str
+    posts_count: int
+    reply_count: int
+    like_count: int
+    views: int
+    author_username: str
+    author_name: str
+    author_id: int
+    tags: List[str]
+    closed: bool = False
+    archived: bool = False
+    pinned: bool = False
+    visible: bool = True
+
+class DiscourseAPI:
+    """Enhanced Discourse API client with comprehensive error handling"""
+    
+    def __init__(self, base_url: str, api_key: str = None, api_username: str = None):
+        self.base_url = base_url.rstrip('/')
+        self.api_key = api_key
+        self.api_username = api_username
+        self.session = requests.Session()
+        
+        # Set up authentication headers if provided
+        if api_key and api_username:
+            self.session.headers.update({
+                'Api-Key': api_key,
+                'Api-Username': api_username,
+                'Content-Type': 'application/json'
+            })
+        
+        # Test connection
+        self._test_connection()
+    
+    def _test_connection(self):
+        """Test the connection to the Discourse instance"""
+        try:
+            response = self._make_request('GET', '/site.json')
+            logger.info(f"Successfully connected to Discourse at {self.base_url}")
+            logger.info(f"Site title: {response.get('title', 'Unknown')}")
+        except Exception as e:
+            logger.error(f"Failed to connect to Discourse: {e}")
+            raise
+    
+    def _make_request(self, method: str, endpoint: str, **kwargs) -> Dict:
+        """Make a request to the Discourse API with error handling"""
+        url = urljoin(self.base_url, endpoint)
+        max_retries = 3
+        
+        for attempt in range(max_retries):
+            try:
+                logger.debug(f"Making {method} request to {url}")
+                response = self.session.request(method, url, **kwargs)
+                
+                # Handle rate limiting
+                if response.status_code == 429:
+                    wait_time = 60 * (attempt + 1)
+                    logger.warning(f"Rate limited. Waiting {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                
+                response.raise_for_status()
+                return response.json()
+                
+            except requests.RequestException as e:
+                logger.error(f"Request failed (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(2 ** attempt)  # Exponential backoff
+        
+        raise Exception(f"Failed to make request after {max_retries} attempts")
+    
+    def get_categories(self) -> List[Dict]:
+        """Get all categories"""
+        logger.info("Fetching categories...")
+        data = self._make_request('GET', '/categories.json')
+        categories = data.get('category_list', {}).get('categories', [])
+        logger.info(f"Found {len(categories)} categories")
+        return categories
+    
+    def get_topics(self, category_id: int = None, page: int = 0) -> List[Dict]:
+        """Get topics from a category or all topics"""
+        if category_id:
+            endpoint = f'/c/{category_id}.json'
+            logger.info(f"Fetching topics from category {category_id}, page {page}")
+        else:
+            endpoint = '/latest.json'
+            logger.info(f"Fetching latest topics, page {page}")
+        
+        params = {'page': page} if page > 0 else {}
+        data = self._make_request('GET', endpoint, params=params)
+        
+        topics = data.get('topic_list', {}).get('topics', [])
+        logger.info(f"Found {len(topics)} topics on page {page}")
+        return topics
+    
+    def get_topic_posts(self, topic_id: int) -> Dict:
+        """Get all posts from a topic"""
+        logger.debug(f"Fetching posts for topic {topic_id}")
+        endpoint = f'/t/{topic_id}.json'
+        return self._make_request('GET', endpoint)
+    
+    def search_posts(self, query: str, page: int = 0) -> Dict:
+        """Search posts using Discourse search"""
+        logger.info(f"Searching for: {query}")
+        params = {
+            'q': query,
+            'page': page + 1  # Discourse uses 1-based indexing
+        }
+        return self._make_request('GET', '/search.json', params=params)
 
 class DiscourseScraper:
-    def __init__(self, base_url="https://discourse.onlinedegree.iitm.ac.in"):
-        self.base_url = base_url
-        self.session = requests.Session()
-        # Enhanced headers with rotation to avoid being blocked
-        self.user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0'
-        ]
-        self.update_headers()
-        
-    def update_headers(self):
-        """Update session headers with random user agent"""
-        headers = {
-            'User-Agent': random.choice(self.user_agents),
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Referer': f'{self.base_url}/',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-        }
-        self.session.headers.update(headers)
-        
-    def test_access(self):
-        """Test different endpoints to find accessible ones"""
-        test_urls = [
-            f"{self.base_url}/latest.json",
-            f"{self.base_url}/categories.json",
-            f"{self.base_url}/c/courses/tds-kb/34.json",
-            f"{self.base_url}/c/courses/tds-kb/34/l/latest.json",
-            f"{self.base_url}/top.json",
-            f"{self.base_url}/search.json?q=TDS",
-            f"{self.base_url}/c/courses/tds-kb.json",
-            f"{self.base_url}/"  # Test basic access
-        ]
-        
-        print("Testing endpoint access...")
-        accessible_urls = []
-        
-        for url in test_urls:
-            try:
-                # Rotate user agent for each request
-                self.update_headers()
-                time.sleep(random.uniform(1, 3))  # Random delay
-                
-                response = self.session.get(url, timeout=15)
-                print(f"✓ {url}: {response.status_code}")
-                
-                if response.status_code == 200:
-                    accessible_urls.append(url)
-                    # Try to parse JSON to verify it's valid
-                    if url.endswith('.json'):
-                        try:
-                            data = response.json()
-                            print(f"  - JSON structure keys: {list(data.keys())[:5]}")
-                        except json.JSONDecodeError:
-                            print(f"  - Warning: Invalid JSON response")
-                elif response.status_code == 403:
-                    print(f"  - 403 Forbidden (may need authentication)")
-                elif response.status_code == 404:
-                    print(f"  - 404 Not Found")
-                else:
-                    print(f"  - HTTP {response.status_code}")
-                    
-            except requests.exceptions.RequestException as e:
-                print(f"✗ {url}: {e}")
-                continue
-        
-        print(f"\nAccessible endpoints: {len(accessible_urls)}")
-        for url in accessible_urls:
-            print(f"  ✓ {url}")
-            
-        return accessible_urls
-        
-    def scrape_tds_posts(self, start_date=None, end_date=None, output_format='json'):
-        """
-        Scrape TDS course posts within date range
-        
-        Args:
-            start_date (str): Start date in YYYY-MM-DD format
-            end_date (str): End date in YYYY-MM-DD format  
-            output_format (str): Output format - 'json' or 'csv'
-        
-        Returns:
-            list: List of scraped posts
-        """
-        posts = []
-        
-        # Parse date filters
-        start_dt = None
-        end_dt = None
-        if start_date:
-            start_dt = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
-        if end_date:
-            end_dt = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc)
-        
-        print(f"Scraping TDS posts from {start_date or 'beginning'} to {end_date or 'now'}...")
-        
-        # Try multiple URL patterns with better error handling
-        urls_to_try = [
-            # Try public endpoints first
-            f"{self.base_url}/latest.json",
-            f"{self.base_url}/top.json",
-            f"{self.base_url}/categories.json",
-            # Then try TDS-specific endpoints
-            f"{self.base_url}/c/courses/tds-kb/34/l/latest.json",
-            f"{self.base_url}/c/courses/tds-kb/34.json",
-            f"{self.base_url}/c/courses/tds-kb.json",
-            f"{self.base_url}/latest.json?category=34",
-            # Search-based approach
-            f"{self.base_url}/search.json?q=TDS"
-        ]
-        
-        topics = []
-        successful_url = None
-        
-        for url in urls_to_try:
-            try:
-                print(f"Trying URL: {url}")
-                
-                # Update headers and add delay
-                self.update_headers()
-                time.sleep(random.uniform(1, 2))
-                
-                response = self.session.get(url, timeout=20)
-                
-                if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        print(f"✓ Success with {url}")
-                        print(f"  Response keys: {list(data.keys())}")
-                        
-                        # Extract topics based on response structure
-                        if 'topic_list' in data:
-                            topics = data['topic_list'].get('topics', [])
-                            successful_url = url
-                            print(f"  Found {len(topics)} topics in topic_list")
-                            break
-                        elif 'latest' in data:
-                            topics = data['latest'].get('topics', [])
-                            successful_url = url
-                            print(f"  Found {len(topics)} topics in latest")
-                            break
-                        elif 'top' in data:
-                            topics = data['top'].get('topics', [])
-                            successful_url = url
-                            print(f"  Found {len(topics)} topics in top")
-                            break
-                        elif 'posts' in data:  # Search results
-                            # Convert search posts to topic format
-                            search_posts = data.get('posts', [])
-                            topic_ids = set()
-                            for post in search_posts:
-                                topic_ids.add(post.get('topic_id'))
-                            
-                            # Create minimal topic objects for found topics
-                            topics = [{'id': tid, 'title': 'Search Result', 'last_posted_at': ''} 
-                                     for tid in topic_ids]
-                            successful_url = url
-                            print(f"  Found {len(topics)} unique topics from search")
-                            break
-                        elif 'category_list' in data:
-                            # Find TDS category and get its topics
-                            categories = data['category_list'].get('categories', [])
-                            for cat in categories:
-                                cat_name = cat.get('name', '').lower()
-                                if 'tds' in cat_name or cat.get('id') == 34:
-                                    print(f"  Found TDS category: {cat}")
-                                    # Try to get topics from this category
-                                    cat_id = cat.get('id')
-                                    if cat_id:
-                                        cat_url = f"{self.base_url}/c/{cat_id}.json"
-                                        try:
-                                            cat_response = self.session.get(cat_url, timeout=15)
-                                            if cat_response.status_code == 200:
-                                                cat_data = cat_response.json()
-                                                if 'topic_list' in cat_data:
-                                                    topics = cat_data['topic_list'].get('topics', [])
-                                                    successful_url = cat_url
-                                                    print(f"  Found {len(topics)} topics in category")
-                                                    break
-                                        except:
-                                            continue
-                            if topics:
-                                break
-                        else:
-                            print(f"  Unknown response structure: {list(data.keys())}")
-                            continue
-                            
-                    except json.JSONDecodeError as e:
-                        print(f"  ✗ JSON decode error: {e}")
-                        continue
-                        
-                elif response.status_code == 403:
-                    print(f"  ✗ 403 Forbidden - trying next endpoint")
-                    continue
-                elif response.status_code == 404:
-                    print(f"  ✗ 404 Not Found - endpoint doesn't exist")
-                    continue
-                else:
-                    print(f"  ✗ HTTP {response.status_code}")
-                    continue
-                    
-            except requests.exceptions.RequestException as e:
-                print(f"  ✗ Request error: {e}")
-                continue
-        
-        if not topics:
-            print("❌ Could not access any Discourse endpoints with topic data")
-            print("This could be due to:")
-            print("  1. Authentication required for the forum")
-            print("  2. Rate limiting or IP blocking")
-            print("  3. Forum configuration restricting API access")
-            print("  4. Network connectivity issues")
-            
-            # Try fallback method
-            return self.fallback_scraping(start_date, end_date, output_format)
-        
-        print(f"Found {len(topics)} topics using {successful_url}")
-        
-        # Filter topics by TDS relevance if we got all topics
-        if any(x in successful_url for x in ['latest.json', 'categories.json', 'top.json']):
-            tds_topics = []
-            for topic in topics:
-                title = topic.get('title', '').lower()
-                category_id = topic.get('category_id')
-                if 'tds' in title or category_id == 34:
-                    tds_topics.append(topic)
-            if tds_topics:
-                topics = tds_topics
-                print(f"Filtered to {len(topics)} TDS-related topics")
-        
-        # Process each topic
-        for i, topic in enumerate(topics):
-            try:
-                topic_title = topic.get('title', 'Untitled')
-                print(f"Processing topic {i+1}/{len(topics)}: {topic_title}")
-                
-                # Parse topic date
-                last_posted_str = topic.get('last_posted_at', '')
-                if last_posted_str:
-                    try:
-                        topic_date = datetime.fromisoformat(last_posted_str.replace('Z', '+00:00'))
-                        
-                        # Filter by date range
-                        if start_dt and topic_date < start_dt:
-                            print(f"  Skipping - before start date")
-                            continue
-                        if end_dt and topic_date > end_dt:
-                            print(f"  Skipping - after end date")
-                            continue
-                    except ValueError:
-                        print(f"  Warning: Could not parse date {last_posted_str}")
-                
-                # Get detailed topic information
-                topic_id = topic.get('id')
-                if not topic_id:
-                    print(f"  Skipping - no topic ID")
-                    continue
-                    
-                topic_url = f"{self.base_url}/t/{topic_id}.json"
-                
-                # Rate limiting with random delay
-                time.sleep(random.uniform(0.5, 1.5))
-                self.update_headers()
-                
-                topic_response = self.session.get(topic_url, timeout=20)
-                if topic_response.status_code == 200:
-                    try:
-                        topic_data = topic_response.json()
-                        
-                        # Extract posts from topic
-                        topic_posts = topic_data.get('post_stream', {}).get('posts', [])
-                        print(f"  Found {len(topic_posts)} posts")
-                        
-                        for post in topic_posts:
-                            post_date_str = post.get('created_at', '')
-                            if post_date_str:
-                                try:
-                                    post_date = datetime.fromisoformat(post_date_str.replace('Z', '+00:00'))
-                                    
-                                    # Filter post by date range
-                                    if start_dt and post_date < start_dt:
-                                        continue
-                                    if end_dt and post_date > end_dt:
-                                        continue
-                                except ValueError:
-                                    continue
-                            
-                            post_info = {
-                                'topic_id': topic_id,
-                                'topic_title': topic.get('title', ''),
-                                'topic_url': f"{self.base_url}/t/{topic.get('slug', '')}/{topic_id}",
-                                'post_id': post.get('id'),
-                                'post_number': post.get('post_number'),
-                                'username': post.get('username', ''),
-                                'created_at': post_date_str,
-                                'updated_at': post.get('updated_at', ''),
-                                'raw_content': post.get('raw', ''),
-                                'cooked_content': post.get('cooked', ''),
-                                'reply_count': post.get('reply_count', 0),
-                                'like_count': self.get_like_count(post),
-                                'topic_views': topic.get('views', 0),
-                                'topic_posts_count': topic.get('posts_count', 0)
-                            }
-                            posts.append(post_info)
-                    
-                    except json.JSONDecodeError as e:
-                        print(f"  ✗ JSON decode error for topic {topic_id}: {e}")
-                        continue
-                
-                elif topic_response.status_code == 403:
-                    print(f"  ✗ 403 Forbidden for topic {topic_id}")
-                    continue
-                elif topic_response.status_code == 404:
-                    print(f"  ✗ 404 Not Found for topic {topic_id}")
-                    continue
-                else:
-                    print(f"  ✗ HTTP {topic_response.status_code} for topic {topic_id}")
-                    continue
-                
-            except Exception as e:
-                print(f"  ✗ Error processing topic {topic.get('id', 'unknown')}: {e}")
-                continue
-        
-        print(f"Successfully scraped {len(posts)} posts")
-        
-        # Save to file
-        if posts:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            if output_format.lower() == 'csv':
-                filename = f"tds_posts_{timestamp}.csv"
-                self.save_to_csv(posts, filename)
-            else:
-                filename = f"tds_posts_{timestamp}.json"
-                self.save_to_json(posts, filename)
-            
-            print(f"Data saved to {filename}")
-        else:
-            print("No posts found matching the criteria")
-        
-        return posts
+    """Main scraper class with enhanced functionality"""
     
-    def get_like_count(self, post):
-        """Extract like count from post actions"""
-        actions = post.get('actions_summary', [])
-        for action in actions:
-            if action.get('id') == 2:  # Like action ID
-                return action.get('count', 0)
-        return 0
+    def __init__(self, base_url: str, api_key: str = None, api_username: str = None):
+        self.api = DiscourseAPI(base_url, api_key, api_username)
+        self.posts = []
+        self.topics = []
+        self.users_cache = {}
     
-    def fallback_scraping(self, start_date, end_date, output_format):
-        """Fallback method when JSON API is not accessible"""
-        print("Attempting fallback scraping method...")
-        
-        # Try RSS feed
-        rss_urls = [
-            f"{self.base_url}/c/courses/tds-kb/34.rss",
-            f"{self.base_url}/latest.rss",
-            f"{self.base_url}/c/courses/tds-kb.rss"
-        ]
-        
-        for rss_url in rss_urls:
-            try:
-                print(f"Trying RSS: {rss_url}")
-                self.update_headers()
-                response = self.session.get(rss_url, timeout=10)
-                if response.status_code == 200:
-                    print(f"✓ RSS accessible: {rss_url}")
-                    print("RSS content preview:")
-                    print(response.text[:500])
-                    print("...")
-                    print("Note: RSS parsing would require 'feedparser' library for full functionality")
-                    return []
-                else:
-                    print(f"✗ RSS HTTP {response.status_code}")
-            except Exception as e:
-                print(f"✗ RSS failed: {e}")
-        
-        # Try sitemap
-        sitemap_urls = [
-            f"{self.base_url}/sitemap.xml",
-            f"{self.base_url}/sitemap_1.xml"
-        ]
-        
-        for sitemap_url in sitemap_urls:
-            try:
-                print(f"Trying sitemap: {sitemap_url}")
-                response = self.session.get(sitemap_url, timeout=10)
-                if response.status_code == 200:
-                    print(f"✓ Sitemap accessible: {sitemap_url}")
-                    print("Sitemap content preview:")
-                    print(response.text[:500])
-                    print("...")
-                    return []
-            except Exception as e:
-                print(f"✗ Sitemap failed: {e}")
-        
-        print("❌ All fallback methods failed")
-        return []
+    def _parse_date(self, date_str: str) -> datetime:
+        """Parse Discourse date string to datetime object"""
+        try:
+            return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        except ValueError:
+            logger.warning(f"Could not parse date: {date_str}")
+            return datetime.now()
     
-    def save_to_json(self, posts, filename):
-        """Save posts to JSON file"""
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(posts, f, indent=2, ensure_ascii=False)
-    
-    def save_to_csv(self, posts, filename):
-        """Save posts to CSV file"""
-        if not posts:
-            return
-            
-        fieldnames = posts[0].keys()
-        with open(filename, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(posts)
-    
-    def get_statistics(self, posts):
-        """Generate statistics from scraped posts"""
-        if not posts:
+    def _get_user_info(self, user_id: int) -> Dict:
+        """Get user information (with caching)"""
+        if user_id in self.users_cache:
+            return self.users_cache[user_id]
+        
+        try:
+            user_data = self.api._make_request('GET', f'/users/{user_id}.json')
+            user_info = user_data.get('user', {})
+            self.users_cache[user_id] = user_info
+            return user_info
+        except Exception as e:
+            logger.warning(f"Could not fetch user {user_id}: {e}")
             return {}
+    
+    def _extract_post_data(self, post_data: Dict, topic_data: Dict) -> Post:
+        """Extract and structure post data"""
+        # Get user information
+        user_info = {}
+        if 'user_id' in post_data:
+            user_info = self._get_user_info(post_data['user_id'])
         
-        stats = {
-            'total_posts': len(posts),
-            'unique_topics': len(set(post['topic_id'] for post in posts)),
-            'unique_users': len(set(post['username'] for post in posts)),
-            'date_range': {
-                'earliest': min(post['created_at'] for post in posts if post['created_at']),
-                'latest': max(post['created_at'] for post in posts if post['created_at'])
-            },
-            'top_contributors': {},
-            'most_active_topics': {}
+        return Post(
+            id=post_data.get('id', 0),
+            topic_id=topic_data.get('id', 0),
+            username=post_data.get('username', ''),
+            name=post_data.get('name', ''),
+            created_at=post_data.get('created_at', ''),
+            raw=post_data.get('raw', ''),
+            cooked=post_data.get('cooked', ''),
+            reply_count=post_data.get('reply_count', 0),
+            like_count=post_data.get('like_count', 0),
+            topic_title=topic_data.get('title', ''),
+            category_name=topic_data.get('category_name', ''),
+            category_id=topic_data.get('category_id', 0),
+            trust_level=post_data.get('trust_level', 0),
+            user_id=post_data.get('user_id', 0),
+            post_number=post_data.get('post_number', 0),
+            reply_to_post_number=post_data.get('reply_to_post_number'),
+            user_title=user_info.get('title'),
+            moderator=post_data.get('moderator', False),
+            admin=post_data.get('admin', False),
+            staff=post_data.get('staff', False),
+            primary_group_name=user_info.get('primary_group_name'),
+            flair_name=user_info.get('flair_name'),
+            avatar_template=post_data.get('avatar_template')
+        )
+    
+    def _extract_topic_data(self, topic_data: Dict) -> Topic:
+        """Extract and structure topic data"""
+        return Topic(
+            id=topic_data.get('id', 0),
+            title=topic_data.get('title', ''),
+            category_id=topic_data.get('category_id', 0),
+            category_name=topic_data.get('category_name', ''),
+            created_at=topic_data.get('created_at', ''),
+            last_posted_at=topic_data.get('last_posted_at', ''),
+            posts_count=topic_data.get('posts_count', 0),
+            reply_count=topic_data.get('reply_count', 0),
+            like_count=topic_data.get('like_count', 0),
+            views=topic_data.get('views', 0),
+            author_username=topic_data.get('last_poster_username', ''),
+            author_name=topic_data.get('last_poster_name', ''),
+            author_id=topic_data.get('posters', [{}])[0].get('user_id', 0) if topic_data.get('posters') else 0,
+            tags=topic_data.get('tags', []),
+            closed=topic_data.get('closed', False),
+            archived=topic_data.get('archived', False),
+            pinned=topic_data.get('pinned', False),
+            visible=topic_data.get('visible', True)
+        )
+    
+    def scrape_by_date_range(self, start_date: datetime, end_date: datetime, 
+                           category_ids: List[int] = None) -> None:
+        """Scrape posts within a date range"""
+        logger.info(f"Scraping posts from {start_date} to {end_date}")
+        
+        # Get categories to scrape
+        if category_ids is None:
+            categories = self.api.get_categories()
+            category_ids = [cat['id'] for cat in categories]
+        
+        total_posts = 0
+        total_topics = 0
+        
+        for category_id in category_ids:
+            logger.info(f"Processing category {category_id}")
+            page = 0
+            
+            while True:
+                try:
+                    topics = self.api.get_topics(category_id, page)
+                    if not topics:
+                        break
+                    
+                    category_posts = 0
+                    for topic_data in topics:
+                        # Check if topic is within date range
+                        topic_date = self._parse_date(topic_data.get('created_at', ''))
+                        if not (start_date <= topic_date <= end_date):
+                            continue
+                        
+                        # Extract topic data
+                        topic = self._extract_topic_data(topic_data)
+                        self.topics.append(topic)
+                        total_topics += 1
+                        
+                        # Get posts for this topic
+                        try:
+                            topic_posts_data = self.api.get_topic_posts(topic_data['id'])
+                            posts = topic_posts_data.get('post_stream', {}).get('posts', [])
+                            
+                            for post_data in posts:
+                                post_date = self._parse_date(post_data.get('created_at', ''))
+                                if start_date <= post_date <= end_date:
+                                    post = self._extract_post_data(post_data, topic_data)
+                                    self.posts.append(post)
+                                    category_posts += 1
+                                    total_posts += 1
+                            
+                            # Add delay to respect rate limits
+                            time.sleep(0.5)
+                            
+                        except Exception as e:
+                            logger.error(f"Error processing topic {topic_data['id']}: {e}")
+                            continue
+                    
+                    logger.info(f"Category {category_id}, page {page}: {category_posts} posts")
+                    
+                    # Break if no more pages
+                    if len(topics) < 30:  # Discourse typically returns 30 topics per page
+                        break
+                    
+                    page += 1
+                    time.sleep(1)  # Rate limiting
+                    
+                except Exception as e:
+                    logger.error(f"Error processing category {category_id}, page {page}: {e}")
+                    break
+        
+        logger.info(f"Scraping complete: {total_topics} topics, {total_posts} posts")
+    
+    def test_api_connection(self) -> Dict[str, Any]:
+        """Test API connection and return diagnostic information"""
+        logger.info("Testing API connection...")
+        
+        test_results = {
+            'connection_status': 'unknown',
+            'site_info': {},
+            'categories_count': 0,
+            'latest_topics_count': 0,
+            'api_authenticated': False,
+            'errors': []
         }
         
-        # Top contributors by post count
-        user_counts = {}
-        for post in posts:
-            user = post['username']
-            user_counts[user] = user_counts.get(user, 0) + 1
+        try:
+            # Test basic connection
+            site_data = self.api._make_request('GET', '/site.json')
+            test_results['site_info'] = {
+                'title': site_data.get('title', 'Unknown'),
+                'description': site_data.get('description', ''),
+                'locale': site_data.get('locale', 'en')
+            }
+            test_results['connection_status'] = 'success'
+            
+            # Test categories
+            categories = self.api.get_categories()
+            test_results['categories_count'] = len(categories)
+            
+            # Test latest topics
+            latest_topics = self.api.get_topics()
+            test_results['latest_topics_count'] = len(latest_topics)
+            
+            # Test if API is authenticated
+            if self.api.api_key and self.api.api_username:
+                test_results['api_authenticated'] = True
+            
+            logger.info("API connection test successful")
+            
+        except Exception as e:
+            test_results['connection_status'] = 'failed'
+            test_results['errors'].append(str(e))
+            logger.error(f"API connection test failed: {e}")
         
-        stats['top_contributors'] = dict(sorted(user_counts.items(), 
-                                              key=lambda x: x[1], reverse=True)[:10])
+        return test_results
+    
+    def save_data(self, format_type: str, filename: str = None) -> str:
+        """Save scraped data to file"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Most active topics by post count
-        topic_counts = {}
-        for post in posts:
-            topic = post['topic_title']
-            topic_counts[topic] = topic_counts.get(topic, 0) + 1
+        if format_type.lower() == 'json':
+            filename = filename or f"discourse_data_{timestamp}.json"
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'topics': [asdict(topic) for topic in self.topics],
+                    'posts': [asdict(post) for post in self.posts],
+                    'metadata': {
+                        'scraped_at': datetime.now().isoformat(),
+                        'total_topics': len(self.topics),
+                        'total_posts': len(self.posts)
+                    }
+                }, f, indent=2, ensure_ascii=False)
         
-        stats['most_active_topics'] = dict(sorted(topic_counts.items(), 
-                                                 key=lambda x: x[1], reverse=True)[:10])
+        elif format_type.lower() == 'csv':
+            # Save posts to CSV
+            posts_filename = filename or f"discourse_posts_{timestamp}.csv"
+            with open(posts_filename, 'w', newline='', encoding='utf-8') as f:
+                if self.posts:
+                    writer = csv.DictWriter(f, fieldnames=asdict(self.posts[0]).keys())
+                    writer.writeheader()
+                    for post in self.posts:
+                        writer.writerow(asdict(post))
+            
+            # Save topics to CSV
+            topics_filename = f"discourse_topics_{timestamp}.csv"
+            with open(topics_filename, 'w', newline='', encoding='utf-8') as f:
+                if self.topics:
+                    writer = csv.DictWriter(f, fieldnames=asdict(self.topics[0]).keys())
+                    writer.writeheader()
+                    for topic in self.topics:
+                        writer.writerow(asdict(topic))
+            
+            filename = posts_filename
+        
+        logger.info(f"Data saved to {filename}")
+        return filename
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get statistics about scraped data"""
+        if not self.posts:
+            return {'error': 'No data scraped yet'}
+        
+        # Calculate statistics
+        stats = {
+            'total_posts': len(self.posts),
+            'total_topics': len(self.topics),
+            'unique_users': len(set(post.username for post in self.posts)),
+            'date_range': {
+                'earliest': min(post.created_at for post in self.posts),
+                'latest': max(post.created_at for post in self.posts)
+            },
+            'categories': {},
+            'top_users': {},
+            'avg_posts_per_topic': len(self.posts) / len(self.topics) if self.topics else 0
+        }
+        
+        # Category statistics
+        for post in self.posts:
+            cat_name = post.category_name or 'Unknown'
+            if cat_name not in stats['categories']:
+                stats['categories'][cat_name] = 0
+            stats['categories'][cat_name] += 1
+        
+        # Top users by post count
+        user_posts = {}
+        for post in self.posts:
+            if post.username not in user_posts:
+                user_posts[post.username] = 0
+            user_posts[post.username] += 1
+        
+        stats['top_users'] = dict(sorted(user_posts.items(), 
+                                       key=lambda x: x[1], reverse=True)[:10])
         
         return stats
 
 def main():
-    parser = argparse.ArgumentParser(description='Scrape TDS Discourse posts within date range')
-    parser.add_argument('--start-date', type=str, help='Start date (YYYY-MM-DD)')
-    parser.add_argument('--end-date', type=str, help='End date (YYYY-MM-DD)')
-    parser.add_argument('--format', choices=['json', 'csv'], default='json', 
-                       help='Output format (json or csv)')
-    parser.add_argument('--stats', action='store_true', 
-                       help='Show statistics after scraping')
-    parser.add_argument('--test', action='store_true',
-                       help='Test endpoint access without scraping')
+    parser = argparse.ArgumentParser(
+        description='Enhanced Discourse Forum Scraper',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python discourse_scraper.py --test
+  python discourse_scraper.py --start-date 2024-01-01 --end-date 2024-01-31
+  python discourse_scraper.py --format csv --stats
+        """
+    )
+    
+    parser.add_argument('--base-url', 
+                       default='https://discourse.onlinedegree.iitm.ac.in',
+                       help='Base URL of the Discourse instance')
+    
+    parser.add_argument('--api-key',
+                       help='Discourse API key (optional, for authenticated requests)')
+    
+    parser.add_argument('--api-username',
+                       help='Discourse API username (required if using API key)')
+    
+    parser.add_argument('--start-date',
+                       type=str,
+                       help='Start date (YYYY-MM-DD format)')
+    
+    parser.add_argument('--end-date',
+                       type=str,
+                       help='End date (YYYY-MM-DD format)')
+    
+    parser.add_argument('--format',
+                       choices=['json', 'csv'],
+                       default='json',
+                       help='Output format (default: json)')
+    
+    parser.add_argument('--output',
+                       help='Output filename')
+    
+    parser.add_argument('--stats',
+                       action='store_true',
+                       help='Display statistics after scraping')
+    
+    parser.add_argument('--test',
+                       action='store_true',
+                       help='Test API connection and display diagnostic information')
+    
+    parser.add_argument('--categories',
+                       nargs='+',
+                       type=int,
+                       help='Specific category IDs to scrape (default: all)')
+    
+    parser.add_argument('--verbose', '-v',
+                       action='store_true',
+                       help='Enable verbose logging')
     
     args = parser.parse_args()
     
-    # Create scraper
-    scraper = DiscourseScraper()
+    # Configure logging level
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
     
-    # Handle test mode
-    if args.test:
-        accessible_urls = scraper.test_access()
-        if not accessible_urls:
-            print("\n❌ No endpoints are accessible. The forum may require authentication.")
-        else:
-            print(f"\n✅ Found {len(accessible_urls)} accessible endpoints.")
-        return
-    
-    # Validate dates
-    if args.start_date:
-        try:
-            datetime.fromisoformat(args.start_date)
-        except ValueError:
-            print("Error: Invalid start date format. Use YYYY-MM-DD")
-            return
-    
-    if args.end_date:
-        try:
-            datetime.fromisoformat(args.end_date)
-        except ValueError:
-            print("Error: Invalid end date format. Use YYYY-MM-DD")
-            return
-    
-    # Run scraper
     try:
-        posts = scraper.scrape_tds_posts(
-            start_date=args.start_date,
-            end_date=args.end_date,
-            output_format=args.format
+        # Initialize scraper
+        scraper = DiscourseScraper(
+            base_url=args.base_url,
+            api_key=args.api_key,
+            api_username=args.api_username
         )
         
-        if args.stats and posts:
-            print("\n=== SCRAPING STATISTICS ===")
-            stats = scraper.get_statistics(posts)
+        # Test mode
+        if args.test:
+            logger.info("Running in test mode...")
+            test_results = scraper.test_api_connection()
             
-            print(f"Total posts: {stats['total_posts']}")
-            print(f"Unique topics: {stats['unique_topics']}")
-            print(f"Unique users: {stats['unique_users']}")
-            print(f"Date range: {stats['date_range']['earliest']} to {stats['date_range']['latest']}")
+            print("\n" + "="*50)
+            print("DISCOURSE API CONNECTION TEST")
+            print("="*50)
+            print(f"Connection Status: {test_results['connection_status'].upper()}")
             
-            print("\nTop contributors:")
-            for user, count in list(stats['top_contributors'].items())[:5]:
-                print(f"  {user}: {count} posts")
+            if test_results['site_info']:
+                print(f"Site Title: {test_results['site_info']['title']}")
+                print(f"Site Description: {test_results['site_info']['description']}")
+                print(f"Locale: {test_results['site_info']['locale']}")
             
-            print("\nMost active topics:")
-            for topic, count in list(stats['most_active_topics'].items())[:5]:
-                print(f"  {topic}: {count} posts")
+            print(f"Categories Available: {test_results['categories_count']}")
+            print(f"Latest Topics: {test_results['latest_topics_count']}")
+            print(f"API Authenticated: {test_results['api_authenticated']}")
+            
+            if test_results['errors']:
+                print("\nErrors:")
+                for error in test_results['errors']:
+                    print(f"  - {error}")
+            
+            print("="*50)
+            return
+        
+        # Parse dates
+        if args.start_date and args.end_date:
+            try:
+                start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
+                end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
+            except ValueError as e:
+                logger.error(f"Invalid date format: {e}")
+                logger.error("Please use YYYY-MM-DD format")
+                return
+        else:
+            # Default to last 30 days
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=30)
+            logger.info(f"Using default date range: {start_date.date()} to {end_date.date()}")
+        
+        # Scrape data
+        scraper.scrape_by_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            category_ids=args.categories
+        )
+        
+        # Save data
+        if scraper.posts or scraper.topics:
+            filename = scraper.save_data(args.format, args.output)
+            logger.info(f"Data saved to {filename}")
+        else:
+            logger.warning("No data found to save")
+        
+        # Display statistics
+        if args.stats:
+            stats = scraper.get_stats()
+            print("\n" + "="*50)
+            print("SCRAPING STATISTICS")
+            print("="*50)
+            
+            if 'error' in stats:
+                print(f"Error: {stats['error']}")
+            else:
+                print(f"Total Posts: {stats['total_posts']}")
+                print(f"Total Topics: {stats['total_topics']}")
+                print(f"Unique Users: {stats['unique_users']}")
+                print(f"Average Posts per Topic: {stats['avg_posts_per_topic']:.2f}")
                 
+                if stats['date_range']:
+                    print(f"Date Range: {stats['date_range']['earliest']} to {stats['date_range']['latest']}")
+                
+                if stats['categories']:
+                    print("\nPosts by Category:")
+                    for cat, count in sorted(stats['categories'].items(), 
+                                           key=lambda x: x[1], reverse=True):
+                        print(f"  {cat}: {count}")
+                
+                if stats['top_users']:
+                    print("\nTop 10 Users by Post Count:")
+                    for user, count in list(stats['top_users'].items())[:10]:
+                        print(f"  {user}: {count}")
+            
+            print("="*50)
+    
     except KeyboardInterrupt:
-        print("\n\n⚠️  Scraping interrupted by user")
+        logger.info("Scraping interrupted by user")
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        logger.error(f"Error during scraping: {e}")
+        raise
 
 if __name__ == "__main__":
     main()
