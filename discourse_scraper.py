@@ -17,7 +17,9 @@ class DiscourseScraper:
     def __init__(self, base_url="https://discourse.onlinedegree.iitm.ac.in"):
         self.base_url = base_url
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                           'AppleWebKit/537.36 (KHTML, like Gecko) '
+                           'Chrome/115.0.0.0 Safari/537.36')
         }
         
     def scrape_tds_posts(self, start_date=None, end_date=None, output_format='json'):
