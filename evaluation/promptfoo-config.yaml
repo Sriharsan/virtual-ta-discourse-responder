@@ -1,0 +1,200 @@
+description: "TDS Virtual TA Project - 15 Realistic Evaluation Questions"
+
+providers:
+  # Add a working provider first
+  - id: openai:gpt-4o-mini
+    config:
+      apiKey: env:OPENAI_API_KEY  # Set this in your environment
+
+  - id: virtual-ta-api
+    config:
+      type: http
+      url: https://virtual-ta-discourse-responder.onrender.com/api
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        question: "{{ vars.question }}"
+      responseParser: |
+        // Parse the JSON response and extract the answer
+        try {
+          const response = JSON.parse(output);
+          return response.answer || output;
+        } catch(e) {
+          return output;
+        }
+
+prompts:
+  - "{{ vars.question }}"
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        // Check if response is valid and meaningful
+        if (typeof output !== 'string' || output.length < 10) {
+          return { pass: false, score: 0, reason: 'Response too short or invalid' };
+        }
+        
+        // Try to parse as JSON if it looks like JSON
+        try {
+          if (output.startsWith('{')) {
+            const response = JSON.parse(output);
+            if (!response.answer || !Array.isArray(response.links)) {
+              return { pass: false, score: 0, reason: 'Invalid response structure' };
+            }
+            return { pass: true, score: 1 };
+          }
+        } catch(e) {
+          // If not JSON, treat as plain text response
+        }
+        
+        return { pass: true, score: 1 };
+
+tests:
+  # Question 1: Model Selection
+  - vars:
+      question: "The question asks to use gpt-3.5-turbo-0125 model but the ai-proxy provided by Anand sir only supports gpt-4o-mini. So should we just use gpt-4o-mini or use the OpenAI API for gpt3.5 turbo?"
+    assert:
+      - type: llm-rubric
+        value: "Response should clarify to use gpt-3.5-turbo-0125 not gpt-4o-mini, and suggest using OpenAI API directly"
+      - type: contains
+        value: "gpt-3.5-turbo-0125"
+
+  # Question 2: Scoring Dashboard
+  - vars:
+      question: "If a student scores 10/10 on GA4 as well as a bonus, how would it appear on the dashboard?"
+    assert:
+      - type: llm-rubric
+        value: "Response should mention the dashboard showing 110 or 110%"
+      - type: contains
+        value: "110"
+
+  # Question 3: Docker vs Podman
+  - vars:
+      question: "I know Docker but have not used Podman before. Should I use Docker for this course?"
+    assert:
+      - type: llm-rubric
+        value: "Response should recommend Podman for the TDS course"
+      - type: contains
+        value: "Podman"
+
+  # Question 4: Future Course Info
+  - vars:
+      question: "When is the TDS Sep 2025 end-term exam?"
+    assert:
+      - type: llm-rubric
+        value: "Response should indicate information is not available or unknown"
+      - type: contains
+        value: "don't"
+
+  # Question 5: Project 1 Deadline
+  - vars:
+      question: "Has the Project 1 deadline been extended? I see conflicting dates in different announcements."
+    assert:
+      - type: llm-rubric
+        value: "Response should mention deadline extension to 16 Feb 2025"
+      - type: contains
+        value: "16 Feb 2025"
+
+  # Question 6: Submission Issues
+  - vars:
+      question: "My TDS assignment is not submitting through the portal. I keep getting an error. What should I do?"
+    assert:
+      - type: llm-rubric
+        value: "Response should provide troubleshooting steps"
+      - type: contains
+        value: "browser"
+
+  # Question 7: API Quota
+  - vars:
+      question: "When running the llm embed command, I'm getting 'insufficient_quota' error but I've only used the model 2-3 times. How do I increase my quota?"
+    assert:
+      - type: llm-rubric
+        value: "Response should mention quota management or API key issues"
+      - type: contains
+        value: "quota"
+
+  # Question 8: Course Difficulty
+  - vars:
+      question: "I'm finding TDS too difficult at my current level. Should I drop this course and take it in a later term?"
+    assert:
+      - type: llm-rubric
+        value: "Response should mention GA1 prerequisite or suggest getting help first"
+      - type: contains
+        value: "GA1"
+
+  # Question 9: GitHub Repository
+  - vars:
+      question: "For Project 1, do I need to make my GitHub repository public? And what should I include in the LICENSE file?"
+    assert:
+      - type: llm-rubric
+        value: "Response should mention public repository and MIT license"
+      - type: contains
+        value: "public"
+
+  # Question 10: Vector Databases
+  - vars:
+      question: "I'm getting an error for the Vector Databases question worth 1 mark in GA3. The validation seems to be failing even though my answer looks correct."
+    assert:
+      - type: llm-rubric
+        value: "Response should address GA3 or vector database validation issues"
+      - type: contains
+        value: "GA3"
+
+  # Question 11: Vercel Deployment
+  - vars:
+      question: "I'm getting a deployment error when trying to deploy my project on Vercel. The build keeps failing. Any suggestions?"
+    assert:
+      - type: llm-rubric
+        value: "Response should provide deployment troubleshooting advice"
+      - type: contains
+        value: "build"
+
+  # Question 12: Course Material Access  
+  - vars:
+      question: "Where can I find the recorded sessions for TDS? I missed the live session on 10th May."
+    assert:
+      - type: llm-rubric
+        value: "Response should mention YouTube playlist or course materials"
+      - type: contains
+        value: "YouTube"
+
+  # Question 13: Evaluation Methodology
+  - vars:
+      question: "How are the TDS projects evaluated? Are they manually graded or automatically evaluated using LLMs?"
+    assert:
+      - type: llm-rubric
+        value: "Response should mention automated evaluation or LLM-based grading"
+      - type: contains
+        value: "LLM"
+
+  # Question 14: Google Cloud Setup
+  - vars:
+      question: "I'm having trouble creating a Google Cloud Project for Module 2, Q11. It says 'You must select a parent organization or folder'. What should I do?"
+    assert:
+      - type: llm-rubric
+        value: "Response should provide GCP setup guidance"
+      - type: contains
+        value: "Google"
+
+  # Question 15: Course Completion
+  - vars:
+      question: "What's the minimum score needed to pass TDS? How are the final grades calculated with the best 4 out of 7 GA rule?"
+    assert:
+      - type: llm-rubric
+        value: "Response should explain grading methodology or best 4 out of 7 rule"
+      - type: contains
+        value: "40%"
+
+# Output configuration
+outputPath: ./evaluation_results.json
+writeLatestResults: true
+
+# Cache configuration
+cache:
+  enabled: true
+  
+# Command line options
+commandLineOptions:
+  verbose: true
