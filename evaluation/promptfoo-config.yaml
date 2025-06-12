@@ -3,17 +3,17 @@ description: "TDS Virtual TA Project - 15 Realistic Evaluation Questions"
 providers:
   - id: openai:gpt-4o-mini
     config:
-      apiKey: env:OPENAI_API_KEY  # Set this in your environment
+      apiKey: env:OPENAI_API_KEY
 
-  - id: https
+  - id: virtual-ta-api
     config:
       url: https://virtual-ta-discourse-responder.onrender.com/api
       method: POST
       headers:
-        Content-Type: application/json
+        content-type: application/json
       body:
-        question: "{{ vars.question }}"
-      responseParser: |
+        question: "{{question}}"
+      transformResponse: |
         try {
           const response = JSON.parse(output);
           return response.answer || output;
@@ -22,7 +22,7 @@ providers:
         }
 
 prompts:
-  - "{{ vars.question }}"
+  - "{{question}}"
 
 defaultTest:
   assert:
@@ -45,7 +45,6 @@ defaultTest:
 tests:
   - vars:
       question: "The question asks to use gpt-3.5-turbo-0125 model but the ai-proxy provided by Anand sir only supports gpt-4o-mini. So should we just use gpt-4o-mini or use the OpenAI API for gpt3.5 turbo?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should clarify to use gpt-3.5-turbo-0125 not gpt-4o-mini, and suggest using OpenAI API directly"
@@ -56,7 +55,6 @@ tests:
 
   - vars:
       question: "If a student scores 10/10 on GA4 as well as a bonus, how would it appear on the dashboard?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should mention the dashboard showing 110 or 110%"
@@ -67,7 +65,6 @@ tests:
 
   - vars:
       question: "I know Docker but have not used Podman before. Should I use Docker for this course?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should recommend Podman for the TDS course"
@@ -80,7 +77,6 @@ tests:
 
   - vars:
       question: "When is the TDS Sep 2025 end-term exam?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should indicate information is not available or unknown"
@@ -89,7 +85,6 @@ tests:
 
   - vars:
       question: "Has the Project 1 deadline been extended? I see conflicting dates in different announcements."
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should mention deadline extension to 16 Feb 2025"
@@ -98,7 +93,6 @@ tests:
 
   - vars:
       question: "My TDS assignment is not submitting through the portal. I keep getting an error. What should I do?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should provide troubleshooting steps"
@@ -107,7 +101,6 @@ tests:
 
   - vars:
       question: "When running the llm embed command, I'm getting 'insufficient_quota' error but I've only used the model 2-3 times. How do I increase my quota?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should mention quota management or API key issues"
@@ -116,7 +109,6 @@ tests:
 
   - vars:
       question: "I'm finding TDS too difficult at my current level. Should I drop this course and take it in a later term?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should mention GA1 prerequisite or suggest getting help first"
@@ -125,7 +117,6 @@ tests:
 
   - vars:
       question: "For Project 1, do I need to make my GitHub repository public? And what should I include in the LICENSE file?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should mention public repository and MIT license"
@@ -134,7 +125,6 @@ tests:
 
   - vars:
       question: "I'm getting an error for the Vector Databases question worth 1 mark in GA3. The validation seems to be failing even though my answer looks correct."
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should address GA3 or vector database validation issues"
@@ -143,7 +133,6 @@ tests:
 
   - vars:
       question: "I'm getting a deployment error when trying to deploy my project on Vercel. The build keeps failing. Any suggestions?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should provide deployment troubleshooting advice"
@@ -152,7 +141,6 @@ tests:
 
   - vars:
       question: "Where can I find the recorded sessions for TDS? I missed the live session on 10th May."
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should mention YouTube playlist or course materials"
@@ -161,7 +149,6 @@ tests:
 
   - vars:
       question: "How are the TDS projects evaluated? Are they manually graded or automatically evaluated using LLMs?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should mention automated evaluation or LLM-based grading"
@@ -170,7 +157,6 @@ tests:
 
   - vars:
       question: "I'm having trouble creating a Google Cloud Project for Module 2, Q11. It says 'You must select a parent organization or folder'. What should I do?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should provide GCP setup guidance"
@@ -179,7 +165,6 @@ tests:
 
   - vars:
       question: "What's the minimum score needed to pass TDS? How are the final grades calculated with the best 4 out of 7 GA rule?"
-    prompt: "{{ vars.question }}"
     assert:
       - type: llm-rubric
         value: "Response should explain grading methodology or best 4 out of 7 rule"
