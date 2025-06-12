@@ -8,7 +8,7 @@ providers:
 
   - id: virtual-ta-api
     config:
-      type: http
+      type: https
       url: https://virtual-ta-discourse-responder.onrender.com/api
       method: POST
       headers:
