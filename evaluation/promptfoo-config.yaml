@@ -21,7 +21,8 @@ providers:
           return output;
         }
 
-prompts: []  # Removed global prompt usage to fix the empty-question error
+prompts:
+  - "{{ vars.question }}"
 
 defaultTest:
   assert:
