@@ -69,3 +69,4 @@ logs/
 # Project specific
 scraped_posts.json
 tds_knowledge.db
+.env
