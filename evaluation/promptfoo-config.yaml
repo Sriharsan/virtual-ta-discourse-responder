@@ -10,19 +10,7 @@ providers:
         Content-Type: application/json
       body:
         question: "{{vars.question}}"
-      responseParser: |
-        if (typeof output === 'string') {
-          try {
-            const response = JSON.parse(output);
-            return response.answer || response.response || output;
-          } catch(e) {
-            return output;
-          }
-        }
-        if (output && typeof output === 'object') {
-          return output.answer || output.response || JSON.stringify(output);
-        }
-        return output || 'No response received';
+      responseParser: "if (typeof output === 'string') { try { const response = JSON.parse(output); return response.answer || response.response || output; } catch(e) { return output; } } if (output && typeof output === 'object') { return output.answer || output.response || JSON.stringify(output); } return output || 'No response received';"
 
 prompts:
   - "{{vars.question}}"
