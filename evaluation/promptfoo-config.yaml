@@ -13,13 +13,9 @@ providers:
         Content-Type: application/json
       body:
         question: "{{vars.question}}"
-      transformResponse: |
-        try {
-          const response = JSON.parse(output);
-          return response.answer || output;
-        } catch(e) {
-          return output;
-        }
+      responseParser: |
+        const response = JSON.parse(output);
+        return response.answer;
 
 prompts:
   - "{{vars.question}}"
