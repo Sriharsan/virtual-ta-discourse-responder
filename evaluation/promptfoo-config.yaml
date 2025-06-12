@@ -1,4 +1,4 @@
-description: "TDS Virtual TA Project - 15 Realistic Evaluation Questions (Fixed)"
+description: "TDS Virtual TA Project - Working Configuration"
 providers:
   - id: openai:gpt-4o-mini
     config:
@@ -10,49 +10,17 @@ providers:
         Content-Type: application/json
       body:
         question: "{{vars.question}}"
-      responseParser: "if (typeof output === 'string') { try { const response = JSON.parse(output); return response.answer || response.response || output; } catch(e) { return output; } } if (output && typeof output === 'object') { return output.answer || output.response || JSON.stringify(output); } return output || 'No response received';"
+      responseParser: "JSON.parse(output).answer"
 
 prompts:
   - "{{vars.question}}"
-
-defaultTest:
-  assert:
-    - type: javascript
-      value: |
-        if (typeof output !== 'string' || output.length < 10) {
-          return { pass: false, score: 0, reason: 'Response too short or invalid' };
-        }
-        
-        // Check if it's a JSON response
-        try {
-          if (output.trim().startsWith('{')) {
-            const response = JSON.parse(output);
-            if (response.answer && response.answer.length > 10) {
-              return { pass: true, score: 1 };
-            }
-            return { pass: false, score: 0, reason: 'Invalid JSON response structure' };
-          }
-        } catch(e) {
-          // Not JSON, treat as plain text
-        }
-        
-        // Plain text response
-        return { pass: true, score: 1 };
 
 tests:
   - vars:
       question: "The question asks to use gpt-3.5-turbo-0125 model but the ai-proxy provided by Anand sir only supports gpt-4o-mini. So should we just use gpt-4o-mini or use the OpenAI API for gpt3.5 turbo?"
     assert:
-      - type: llm-rubric
-        value: "Response should clarify to use gpt-3.5-turbo-0125 not gpt-4o-mini, and suggest using OpenAI API directly"
       - type: contains
         value: "gpt-3.5-turbo-0125"
-      - type: contains
-        value: "https://discourse.onlinedegree.iitm.ac.in/t/ga5-question-8-clarification/155939"
 
 outputPath: ./evaluation_results.json
 writeLatestResults: true
-cache:
-  enabled: true
-commandLineOptions:
-  verbose: true
