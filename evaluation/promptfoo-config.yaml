@@ -1,4 +1,5 @@
-description: "TDS Virtual TA Project - Working Configuration"
+description: "TDS Virtual TA Project - Final Working Configuration"
+
 providers:
   - id: openai:gpt-4o-mini
     config:
@@ -10,7 +11,13 @@ providers:
         Content-Type: application/json
       body:
         question: "{{vars.question}}"
-      responseParser: "JSON.parse(output).answer"
+      transformResponse: |
+        try {
+          const response = JSON.parse(output);
+          return response.answer || output;
+        } catch (e) {
+          return output;
+        }
 
 prompts:
   - "{{vars.question}}"
@@ -21,6 +28,8 @@ tests:
     assert:
       - type: contains
         value: "gpt-3.5-turbo-0125"
+      - type: contains
+        value: "https://discourse.onlinedegree.iitm.ac.in/t/ga5-question-8-clarification/155939"
 
 outputPath: ./evaluation_results.json
 writeLatestResults: true
