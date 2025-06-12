@@ -5,7 +5,7 @@ providers:
     config:
       apiKey: env:OPENAI_API_KEY
 
-  - id: virtual-ta-api
+  - id: http://virtual-ta-api
     config:
       url: https://virtual-ta-discourse-responder.onrender.com/api
       method: POST
