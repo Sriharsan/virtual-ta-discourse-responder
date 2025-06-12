@@ -14,7 +14,7 @@ urllib3==2.2.1
 
 # OpenAI & Prompt Evaluation
 openai==1.84.0
-promptfoo==0.1.0
+promptfoo==0.114.7
 python-dotenv==1.1.0
 
 # Image Processing
