@@ -5,16 +5,15 @@ providers:
     config:
       apiKey: env:OPENAI_API_KEY
 
-  - id: https://virtual-ta-discourse-responder.onrender.com/api
+  - id: custom-api
     config:
+      url: https://virtual-ta-discourse-responder.onrender.com/api
       method: POST
       headers:
         Content-Type: application/json
       body:
         question: "{{vars.question}}"
-      responseParser: |
-        const response = JSON.parse(output);
-        return response.answer;
+      responseParser: "json.answer"
 
 prompts:
   - "{{vars.question}}"
