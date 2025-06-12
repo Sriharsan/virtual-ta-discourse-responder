@@ -3,7 +3,7 @@ description: "Test OpenAI only"
 providers:
   - id: openai:gpt-4o-mini
     config:
-      apiKey: "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"
+      apiKey: env:OPENAI_API_KEY
 
 prompts:
   - "{{vars.question}}"
