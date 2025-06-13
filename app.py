@@ -333,14 +333,10 @@ def trigger_scrape():
         logger.error(f"Error in scrape endpoint: {e}")
         return jsonify({"error": "Scraping failed", "message": str(e)}), 500
 
-# Initialize with some data
-kb.scrape_tds_website()
-kb.scrape_discourse_forum()
-
 if __name__ == '__main__':
     # Initialize with some data
-    #kb.scrape_tds_website()
-    #kb.scrape_discourse_forum()
+    kb.scrape_tds_website()
+    kb.scrape_discourse_forum()
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
