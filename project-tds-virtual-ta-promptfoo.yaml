@@ -10,13 +10,7 @@ providers:
         {
           "question": "{{ question }}"
         }
-      transformResponse: |
-        try {
-          const response = JSON.parse(output);
-          return response;
-        } catch(e) {
-          return { answer: output, links: [] };
-        }
+      transformResponse: "json"
 
 prompts:
   - "{{ question }}"
