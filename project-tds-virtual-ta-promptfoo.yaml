@@ -6,11 +6,8 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-      body: |
-        {
-          "question": "{{ question }}"
-        }
-      transformResponse: "json"
+      body:
+        question: "{{ question }}"
 
 prompts:
   - "{{ question }}"
