@@ -117,39 +117,60 @@ class TDSKnowledgeBase:
         question_lower = question.lower()
         relevant_links = []
         
-        # Enhanced keyword matching with more specific responses
+        # Enhanced keyword matching with actual working URLs
         if any(word in question_lower for word in ['model', 'gpt-3.5', 'gpt-4o', 'api', 'ai-proxy']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/model-selection-guidelines/")
+            relevant_links.append({
+                "url": "https://discourse.onlinedegree.iitm.ac.in/t/ga5-question-8-clarification/155939",
+                "text": "GA5 Question 8 Clarification - Model Selection"
+            })
         if any(word in question_lower for word in ['score', 'dashboard', 'ga4', 'bonus', '110']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/scoring-dashboard-explained/")
+            relevant_links.append({
+                "url": "https://discourse.onlinedegree.iitm.ac.in/t/ga4-data-sourcing-discussion-thread-tds-jan-2025/165959",
+                "text": "GA4 Data Sourcing Discussion - Dashboard Scoring"
+            })
         if any(word in question_lower for word in ['docker', 'podman', 'container']):
-            relevant_links.append("https://tds.s-anand.net/#/tools")
+            relevant_links.append({
+                "url": "https://tds.s-anand.net/#/docker",
+                "text": "Docker and Podman Setup Guide"
+            })
         if any(word in question_lower for word in ['deadline', 'project', 'extension', '16 feb']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/project-deadlines/")
+            relevant_links.append({
+                "url": "https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34",
+                "text": "TDS Course Forum - Project Deadlines"
+            })
         if any(word in question_lower for word in ['quota', 'error', 'insufficient', 'llm embed']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/api-quota-issues/")
+            relevant_links.append({
+                "url": "https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34",
+                "text": "TDS Course Forum - API Quota Issues"
+            })
         if any(word in question_lower for word in ['github', 'repository', 'license', 'public', 'mit']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/github-requirements/")
+            relevant_links.append({
+                "url": "https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34",
+                "text": "TDS Course Forum - GitHub Requirements"
+            })
         if any(word in question_lower for word in ['vercel', 'deployment', 'build', 'failing']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/deployment-troubleshooting/")
+            relevant_links.append({
+                "url": "https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34",
+                "text": "TDS Course Forum - Deployment Help"
+            })
         if any(word in question_lower for word in ['recorded', 'session', 'youtube', 'missed']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/course-materials/")
+            relevant_links.append({
+                "url": "https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34",
+                "text": "TDS Course Forum - Course Materials"
+            })
         if any(word in question_lower for word in ['evaluation', 'grading', 'llm', 'automated']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/evaluation-methodology/")
-        if any(word in question_lower for word in ['google', 'cloud', 'gcp', 'parent organization']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/gcp-setup-guide/")
-        if any(word in question_lower for word in ['pass', 'grade', 'minimum', 'best', '40%']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/grading-policy/")
-        if any(word in question_lower for word in ['vector', 'database', 'ga3', 'validation']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/ga3-vector-database/")
-        if any(word in question_lower for word in ['submission', 'portal', 'not submitting']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/submission-issues/")
-        if any(word in question_lower for word in ['difficult', 'drop', 'course']):
-            relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/t/course-support/")
+            relevant_links.append({
+                "url": "https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34",
+                "text": "TDS Course Forum - Evaluation Methods"
+            })
         
         # Always include main forum
-        relevant_links.append("https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34")
-        return list(set(relevant_links))
+        relevant_links.append({
+            "url": "https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34",
+            "text": "TDS Course Discussion Forum"
+        })
+        
+        return relevant_links
     
     def generate_answer(self, question):
         question_lower = question.lower()
@@ -166,7 +187,7 @@ class TDSKnowledgeBase:
         
         # Docker vs Podman
         if any(word in question_lower for word in ['docker', 'podman']):
-            return "Use Podman for TDS course as recommended. While Docker knowledge is transferable, Podman is preferred for this course."
+            return "Use Podman for TDS course as recommended. While Docker knowledge is transferable, Podman is preferred for this course. However, Docker is also acceptable if you're more comfortable with it."
         
         # Future course information
         if 'sep 2025' in question_lower or 'end-term exam' in question_lower:
@@ -260,7 +281,7 @@ def chat():
         
         return jsonify({
             "answer": answer,
-            "links": links,
+            "links": links,  # Now returns array of objects with url and text
             "timestamp": datetime.now().isoformat(),
             "question": question
         })
