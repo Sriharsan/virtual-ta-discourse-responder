@@ -258,37 +258,58 @@ def home():
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
-# Main API endpoint - accepts both GET and POST for compatibility
+# Improved API endpoint with better error handling
 @app.route('/api', methods=['POST', 'GET'])
 def chat():
     try:
+        # Log the incoming request
+        logger.info(f"Received {request.method} request to /api")
+        
         if request.method == 'GET':
-            # Handle GET requests for testing
+            # Handle GET requests for testing - provide default question if empty
             question = request.args.get('question', '')
+            if not question:
+                question = "What is TDS course about?"  # Default question for testing
         else:
             # Handle POST requests
-            data = request.get_json()
-            if not data or 'question' not in data:
-                return jsonify({"error": "Missing 'question' field"}), 400
-            question = data['question']
+            try:
+                data = request.get_json(force=True)  # Force JSON parsing
+                if not data:
+                    return jsonify({"error": "No JSON data provided"}), 400
+                if 'question' not in data:
+                    return jsonify({"error": "Missing 'question' field in JSON"}), 400
+                question = data['question']
+            except Exception as json_error:
+                logger.error(f"JSON parsing error: {json_error}")
+                return jsonify({"error": "Invalid JSON format"}), 400
         
         if not question or not question.strip():
             return jsonify({"error": "Question cannot be empty"}), 400
             
         question = question.strip()
+        logger.info(f"Processing question: {question[:100]}...")  # Log first 100 chars
+        
+        # Generate response
         answer = kb.generate_answer(question)
         links = kb.find_relevant_content(question)
         
-        return jsonify({
+        response_data = {
             "answer": answer,
-            "links": links,  # Now returns array of objects with url and text
+            "links": links,
             "timestamp": datetime.now().isoformat(),
             "question": question
-        })
+        }
+        
+        logger.info(f"Generated response with {len(links)} links")
+        return jsonify(response_data)
         
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {e}")
-        return jsonify({"error": "Internal server error", "message": str(e)}), 500
+        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+        return jsonify({
+            "error": "Internal server error", 
+            "message": str(e),
+            "timestamp": datetime.now().isoformat()
+        }), 500
 
 @app.route('/api/scrape', methods=['POST'])
 def trigger_scrape():
