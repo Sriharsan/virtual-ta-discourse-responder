@@ -7,15 +7,10 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-      body: |
-        {
-          "question": "{{ question }}"{% if image %},
-          "image": "{{ image }}"{% endif %}
-        }
+      # Fix: Use proper JSON object instead of string template
+      body:
+        question: "{{ question }}"
       transformResponse: json
-      # Add timeout and retry configuration
-      timeout: 30000  # 30 seconds timeout
-      max_retries: 2  # Reduce retries to speed up failures
 
 # Ensure JSON schema
 defaultTest:
