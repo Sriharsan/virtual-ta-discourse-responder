@@ -9,9 +9,12 @@ providers:
         Content-Type: application/json
       body: |
         {
-          "question": "{{ question }}"
+          "question": "{{ vars.question }}"
         }
       transformResponse: json
+
+prompts:
+  - "{{ vars.question }}"
 
 # Ensure JSON schema
 defaultTest:
@@ -76,4 +79,7 @@ writeLatestResults: true
 
 commandLineOptions:
   cache: true
+
+# Force single concurrency to prevent timeouts
+evaluateOptions:
   maxConcurrency: 1
