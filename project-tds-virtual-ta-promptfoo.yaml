@@ -77,9 +77,8 @@ tests:
 
 writeLatestResults: true
 
-commandLineOptions:
-  cache: true
-
-# Force single concurrency to prevent timeouts
 evaluateOptions:
   maxConcurrency: 1
+  
+commandLineOptions:
+  cache: true
