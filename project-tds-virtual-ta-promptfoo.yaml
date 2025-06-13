@@ -13,6 +13,9 @@ providers:
           "image": "{{ image }}"{% endif %}
         }
       transformResponse: json
+      # Add timeout and retry configuration
+      timeout: 30000  # 30 seconds timeout
+      max_retries: 2  # Reduce retries to speed up failures
 
 # Ensure JSON schema
 defaultTest:
@@ -55,6 +58,7 @@ tests:
       - type: contains
         transform: JSON.stringify(output.links)
         value: https://discourse.onlinedegree.iitm.ac.in/t/ga4-data-sourcing-discussion-thread-tds-jan-2025/165959
+
   - vars:
       question: I know Docker but have not used Podman before. Should I use Docker for this course?
     assert:
@@ -67,6 +71,7 @@ tests:
       - type: contains
         transform: JSON.stringify(output.links)
         value: https://tds.s-anand.net/#/docker
+
   - vars:
       question: When is the TDS Sep 2025 end-term exam?
     assert:
@@ -75,6 +80,5 @@ tests:
         value: Says it doesn't know (since this information is not available yet)
 
 writeLatestResults: true
-
 commandLineOptions:
   cache: true
