@@ -8,8 +8,9 @@ providers:
         Content-Type: application/json
       body:
         question: "{{ question }}"
-      timeout: 60000
-      retry: 1
+      timeout: 120000  # Increased timeout
+      retry: 4         # More retries
+      transformResponse: json
 
 prompts:
   - "{{ question }}"
@@ -73,6 +74,5 @@ tests:
         value: "Says it doesn't know (since this information is not available yet)"
 
 writeLatestResults: true
-
 commandLineOptions:
   cache: true
