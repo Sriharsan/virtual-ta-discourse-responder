@@ -1,4 +1,4 @@
-description: "TDS Virtual TA Project Sample (fixed and debug-ready)"
+description: "TDS Virtual TA Project Sample (but not the actual evaluation) Questions"
 
 providers:
   - id: https
@@ -13,12 +13,10 @@ providers:
         }
       transformResponse: json
 
-# Proper prompt definition
 prompts:
-  - id: question_prompt
-    prompt: "{{ vars.question }}"
+  - "{{ vars.question }}"
 
-# Assert the output format
+# Ensure JSON schema
 defaultTest:
   assert:
     - type: is-json
@@ -36,16 +34,17 @@ defaultTest:
                 url: { type: string }
                 text: { type: string }
 
-# Sample tests
 tests:
   - vars:
       question: The question asks to use gpt-3.5-turbo-0125 model but the ai-proxy provided by Anand sir only supports gpt-4o-mini. So should we just use gpt-4o-mini or use the OpenAI API for gpt3.5 turbo?
     assert:
       - type: llm-rubric
-        transform: "output.answer"
+        transform: |
+          output.answer
         value: Clarifies use of gpt-3.5-turbo-0125 not gpt-4o-mini
       - type: contains
-        transform: "JSON.stringify(output.links)"
+        transform: |
+          JSON.stringify(output.links)
         value: https://discourse.onlinedegree.iitm.ac.in/t/ga5-question-8-clarification/155939
 
   - vars:
@@ -57,7 +56,7 @@ tests:
       - type: contains
         transform: "JSON.stringify(output.links)"
         value: https://discourse.onlinedegree.iitm.ac.in/t/ga4-data-sourcing-discussion-thread-tds-jan-2025/165959
-
+        
   - vars:
       question: I know Docker but have not used Podman before. Should I use Docker for this course?
     assert:
@@ -70,7 +69,7 @@ tests:
       - type: contains
         transform: "JSON.stringify(output.links)"
         value: https://tds.s-anand.net/#/docker
-
+        
   - vars:
       question: When is the TDS Sep 2025 end-term exam?
     assert:
@@ -78,19 +77,11 @@ tests:
         transform: "output.answer"
         value: Says it doesn't know (since this information is not available yet)
 
-# Optional: Debug test
-  - vars:
-      question: test
-    assert:
-      - type: javascript
-        value: |
-          console.log("DEBUG OUTPUT:", JSON.stringify(output, null, 2));
-          return output.answer && output.answer.length > 0;
-
 writeLatestResults: true
 
 commandLineOptions:
   cache: true
 
+# Force single concurrency to prevent timeouts
 evaluateOptions:
   maxConcurrency: 1
