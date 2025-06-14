@@ -217,12 +217,12 @@ Test the API endpoints:
 
 ```bash
 # Health check
-curl -X GET http://virtual-ta-discourse-responder.onrender.com/health
+curl -X GET https://virtual-ta-discourse-responder.onrender.com/health
 
 # Test question
-curl -X POST http://virtual-ta-discourse-responder.onrender.com/api \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is the difference between pandas and numpy?"}'
+curl -X POST https://virtual-ta-discourse-responder.onrender.com/api
+-H "Content-Type: application/json"
+-d '{"question": "What is the difference between pandas and numpy?"}'
 ```
 
 
