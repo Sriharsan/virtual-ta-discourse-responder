@@ -1,5 +1,8 @@
 description: "TDS Virtual TA Project Sample (but not the actual evaluation) Questions"
 
+prompts:
+  - "{{question}}"  
+
 providers:
   - id: https
     config:
