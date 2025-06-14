@@ -83,7 +83,7 @@ curl "http://localhost:5000/api/" \
 
 Returns the health status of the API.
 
-## Discourse Scraper (Bonus)
+## Discourse Scraper 
 
 The included `discourse_scraper.py` script can scrape Discourse posts across a date range:
 
@@ -130,6 +130,7 @@ gunicorn --bind 0.0.0.0:5000 --workers 2 app:app
 ### Platform Deployment
 
 This application can be deployed on:
+- **Render**: Primarily deployed on this url
 - **Heroku**: Use the included `Procfile`
 - **Railway**: Direct GitHub deployment
 - **Google Cloud Run**: Use the Dockerfile
@@ -214,13 +215,6 @@ curl -X POST http://localhost:5000/api/ \
   -d '{"question": "What is the difference between pandas and numpy?"}'
 ```
 
-## Evaluation
-
-This project is evaluated using `promptfoo` with realistic student questions. The evaluation criteria include:
-
-- **Accuracy**: Correctness of answers (up to 2 marks each)
-- **Relevance**: How well answers address the question
-- **Citations**: Quality of provided links and references
 
 ### Running Evaluation
 
