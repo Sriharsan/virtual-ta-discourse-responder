@@ -72,9 +72,9 @@ The API will be available at `http://localhost:5000`
 ### Example cURL Request
 
 ```bash
-curl "http://localhost:5000/api/" \
+curl -X POST https://virtual-ta-discourse-responder.onrender.com/api \
   -H "Content-Type: application/json" \
-  -d "{\"question\": \"Should I use gpt-4o-mini which AI proxy supports, or gpt3.5 turbo?\", \"image\": \"$(base64 -w0 project-tds-virtual-ta-q1.webp)\"}"
+  -d '{"question": "Should I use gpt-4o-mini or gpt-3.5-turbo-0125?"}'
 ```
 
 ### Health Check
@@ -221,8 +221,8 @@ curl -X GET https://virtual-ta-discourse-responder.onrender.com/health
 
 # Test question
 curl -X POST https://virtual-ta-discourse-responder.onrender.com/api
--H "Content-Type: application/json"
--d '{"question": "What is the difference between pandas and numpy?"}'
+  -H "Content-Type: application/json"
+  -d '{"question": "What is the difference between pandas and numpy?"}'
 ```
 
 
