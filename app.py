@@ -13,8 +13,11 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with more detailed format
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 class TDSKnowledgeBase:
@@ -43,6 +46,14 @@ class TDSKnowledgeBase:
             'resources': {
                 'course_material': 'YouTube playlist available for recorded sessions',
                 'support': 'Post questions on Discourse forum for help'
+            },
+            # Add general programming knowledge
+            'programming_topics': {
+                'pandas_vs_numpy': {
+                    'pandas': 'Data manipulation library built on NumPy, designed for structured data with DataFrames and Series',
+                    'numpy': 'Numerical computing library for arrays and mathematical operations',
+                    'difference': 'NumPy is for numerical arrays, Pandas is for data analysis with labeled data structures'
+                }
             }
         }
         self.scraped_data = []
@@ -164,6 +175,17 @@ class TDSKnowledgeBase:
                 "text": "TDS Course Forum - Evaluation Methods"
             })
         
+        # Add programming-related links
+        if any(word in question_lower for word in ['pandas', 'numpy', 'difference', 'programming']):
+            relevant_links.append({
+                "url": "https://pandas.pydata.org/docs/",
+                "text": "Pandas Official Documentation"
+            })
+            relevant_links.append({
+                "url": "https://numpy.org/doc/",
+                "text": "NumPy Official Documentation"
+            })
+        
         # Always include main forum
         relevant_links.append({
             "url": "https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34",
@@ -174,6 +196,31 @@ class TDSKnowledgeBase:
     
     def generate_answer(self, question):
         question_lower = question.lower()
+        
+        # Programming questions
+        if 'pandas' in question_lower and 'numpy' in question_lower:
+            return """NumPy and Pandas are both essential Python libraries but serve different purposes:
+
+**NumPy (Numerical Python):**
+- Foundation for numerical computing in Python
+- Works with homogeneous arrays (all elements same type)
+- Optimized for mathematical operations and linear algebra
+- Lower-level, more memory efficient
+- Example: `np.array([1, 2, 3, 4])`
+
+**Pandas:**
+- Built on top of NumPy
+- Designed for data manipulation and analysis
+- Works with heterogeneous data (mixed types)
+- Provides DataFrames and Series structures
+- Higher-level with more data analysis features
+- Example: `pd.DataFrame({'A': [1, 2], 'B': ['x', 'y']})`
+
+**Key Differences:**
+- NumPy: Arrays, mathematical operations, performance
+- Pandas: DataFrames, data cleaning, analysis, labeled data
+
+Use NumPy for numerical computations, Pandas for data analysis tasks."""
         
         # Model selection questions
         if any(word in question_lower for word in ['gpt-3.5', 'gpt-4o', 'ai-proxy', 'model']):
@@ -258,36 +305,58 @@ def home():
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
-# Improved API endpoint with better error handling
+# Enhanced API endpoint with comprehensive error handling and logging
 @app.route('/api', methods=['POST', 'GET'])
 def chat():
     try:
-        # Log the incoming request
+        # Log the incoming request with headers
         logger.info(f"Received {request.method} request to /api")
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request content type: {request.content_type}")
         
         if request.method == 'GET':
-            # Handle GET requests for testing - provide default question if empty
+            # Handle GET requests for testing
             question = request.args.get('question', '')
             if not question:
-                question = "What is TDS course about?"  # Default question for testing
+                question = "What is TDS course about?"
         else:
-            # Handle POST requests
+            # Handle POST requests with detailed logging
+            logger.info(f"Raw request data: {request.get_data()}")
+            
             try:
-                data = request.get_json(force=True)  # Force JSON parsing
+                # Try different approaches to get JSON data
+                if request.is_json:
+                    data = request.get_json()
+                    logger.info(f"Parsed JSON data: {data}")
+                else:
+                    # Force JSON parsing even if content-type is not set correctly
+                    data = request.get_json(force=True)
+                    logger.info(f"Force-parsed JSON data: {data}")
+                
                 if not data:
+                    logger.error("No JSON data received")
                     return jsonify({"error": "No JSON data provided"}), 400
+                    
                 if 'question' not in data:
+                    logger.error(f"Missing 'question' field. Available fields: {list(data.keys())}")
                     return jsonify({"error": "Missing 'question' field in JSON"}), 400
+                    
                 question = data['question']
+                
             except Exception as json_error:
                 logger.error(f"JSON parsing error: {json_error}")
-                return jsonify({"error": "Invalid JSON format"}), 400
+                logger.error(f"Request data type: {type(request.get_data())}")
+                return jsonify({
+                    "error": "Invalid JSON format", 
+                    "details": str(json_error),
+                    "received_data": str(request.get_data())
+                }), 400
         
         if not question or not question.strip():
             return jsonify({"error": "Question cannot be empty"}), 400
             
         question = question.strip()
-        logger.info(f"Processing question: {question[:100]}...")  # Log first 100 chars
+        logger.info(f"Processing question: {question[:100]}...")
         
         # Generate response
         answer = kb.generate_answer(question)
@@ -297,7 +366,8 @@ def chat():
             "answer": answer,
             "links": links,
             "timestamp": datetime.now().isoformat(),
-            "question": question
+            "question": question,
+            "status": "success"
         }
         
         logger.info(f"Generated response with {len(links)} links")
@@ -308,7 +378,8 @@ def chat():
         return jsonify({
             "error": "Internal server error", 
             "message": str(e),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "status": "error"
         }), 500
 
 @app.route('/api/scrape', methods=['POST'])
@@ -333,10 +404,26 @@ def trigger_scrape():
         logger.error(f"Error in scrape endpoint: {e}")
         return jsonify({"error": "Scraping failed", "message": str(e)}), 500
 
+# Add a simple test endpoint
+@app.route('/test', methods=['GET', 'POST'])
+def test():
+    return jsonify({
+        "message": "Test endpoint working",
+        "method": request.method,
+        "timestamp": datetime.now().isoformat(),
+        "status": "success"
+    })
+
 if __name__ == '__main__':
     # Initialize with some data
-    kb.scrape_tds_website()
-    kb.scrape_discourse_forum()
+    logger.info("Starting Flask application...")
+    try:
+        kb.scrape_tds_website()
+        kb.scrape_discourse_forum()
+        logger.info("Initial data scraping completed")
+    except Exception as e:
+        logger.error(f"Error during initialization: {e}")
     
     port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Starting server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
