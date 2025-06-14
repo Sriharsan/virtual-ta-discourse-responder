@@ -114,28 +114,28 @@ For local testing and development, follow the installation steps above.
 ## Render Deployment (Recommended)
 This application is optimized for deployment on Render:
 
-Fork/Clone this repository to your GitHub account
-Create a new Web Service on Render
-Connect your GitHub repository
-Configure Environment Variables:
+- Fork/Clone this repository to your GitHub account
+- Create a new Web Service on Render
+- Connect your GitHub repository
+- Configure Environment Variables:
 
-OPENAI_API_KEY: Your OpenAI API key
-PYTHON_VERSION: 3.9 (optional)
+- OPENAI_API_KEY: Your OpenAI API key
+- PYTHON_VERSION: 3.9 (optional)
 
 
-Deploy: Render will automatically detect and deploy your Flask application
+- Deploy: Render will automatically detect and deploy your Flask application
 
 ## Render Configuration
 
-Build Command: pip install -r requirements.txt
-Start Command: python app.py or gunicorn app:app
-Environment: Python 3
+- Build Command: pip install -r requirements.txt
+- Start Command: ```python app.py``` or ```gunicorn app:app```
+- Environment: Python 3
 
 ## Alternative Platforms
 
-Heroku: Use the included Procfile
-Railway: Direct GitHub deployment
-PythonAnywhere: Upload files and configure WSGI
+- Heroku: Use the included Procfile
+- Railway: Direct GitHub deployment
+- PythonAnywhere: Upload files and configure WSGI
 
 ### Using Gunicorn
 
