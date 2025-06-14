@@ -109,33 +109,39 @@ python discourse_scraper.py \
 
 ## Deployment
 
-### Using Docker
+Local Development
+For local testing and development, follow the installation steps above.
+Render Deployment (Recommended)
+This application is optimized for deployment on Render:
 
-1. Build the Docker image:
-```bash
-docker build -t tds-virtual-ta .
-```
+Fork/Clone this repository to your GitHub account
+Create a new Web Service on Render
+Connect your GitHub repository
+Configure Environment Variables:
 
-2. Run the container:
-```bash
-docker run -p 5000:5000 -e OPENAI_API_KEY="your-api-key" tds-virtual-ta
-```
+OPENAI_API_KEY: Your OpenAI API key
+PYTHON_VERSION: 3.9 (optional)
+
+
+Deploy: Render will automatically detect and deploy your Flask application
+
+Render Configuration
+
+Build Command: pip install -r requirements.txt
+Start Command: python app.py or gunicorn app:app
+Environment: Python 3
+
+Alternative Platforms
+
+Heroku: Use the included Procfile
+Railway: Direct GitHub deployment
+PythonAnywhere: Upload files and configure WSGI
 
 ### Using Gunicorn
 
 ```bash
 gunicorn --bind 0.0.0.0:5000 --workers 2 app:app
 ```
-
-### Platform Deployment
-
-This application can be deployed on:
-- **Render**: Primarily deployed on this url
-- **Heroku**: Use the included `Procfile`
-- **Railway**: Direct GitHub deployment
-- **Google Cloud Run**: Use the Dockerfile
-- **AWS ECS/Fargate**: Use the Dockerfile
-- **DigitalOcean App Platform**: Direct GitHub deployment
 
 ## Environment Variables
 
@@ -183,14 +189,18 @@ The application uses SQLite with two main tables:
 ### Project Structure
 
 ```
-tds-virtual-ta/
-├── app.py                  # Main Flask application
-├── discourse_scraper.py    # Bonus scraper script
-├── requirements.txt        # Python dependencies
-├── Dockerfile             # Docker configuration
-├── README.md              # This file
-├── LICENSE                # MIT License
-└── tds_knowledge.db       # SQLite database (created on first run)
+virtual-ta-discourse-responder/
+├── .gitignore                              # Git ignore rules
+├── LICENSE                                 # MIT License
+├── Procfile                               # Heroku deployment config
+├── README.md                              # Project documentation
+├── app.py                                 # Main Flask application
+├── deploy_script.py                       # Deployment automation script
+├── discourse_scraper.py                   # Forum scraping utility
+├── project-tds-virtual-ta-promptfoo.yaml  # Evaluation configuration
+├── requirements.txt                       # Python dependencies
+├── runtime.txt                           # Python version specification
+└── test_api.py                           # API testing script
 ```
 
 ### Adding New Data Sources
