@@ -1342,3 +1342,5 @@ class ProductionDiscourseScraper:
             return posts
             
         except Exception as e:
+            logger.error(f"Failed to scrape topic HTML for {topic.get('url', 'unknown')}: {e}")
+            return []
