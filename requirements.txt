@@ -18,3 +18,4 @@ python-dotenv==1.1.0
 
 # Image Processing
 Pillow==11.1.0
+pytesseract==0.3.10
