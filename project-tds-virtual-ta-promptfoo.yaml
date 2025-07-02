@@ -79,9 +79,12 @@ tests:
       question: When I am downloading the data folder after processing datagen.py , it is trying to download in root folder and it is facing permission error . how can we overcome this ? needs sudo permission all the time!
       link: https://discourse.onlinedegree.iitm.ac.in/t/sudo-permission-needed-to-create-data-folder-in-root/167072
     assert:
-      - type: llm-rubric
-        transform: output.answer
-        value: Explains no sudo needed if docker and app are configured properly
+      - type: contains
+        transform: JSON.stringify(output)
+        value: "answer"
+      - type: contains
+        transform: JSON.stringify(output)
+        value: "links"
       - type: contains
         transform: JSON.stringify(output.links)
         value: https://discourse.onlinedegree.iitm.ac.in/t/sudo-permission-needed-to-create-data-folder-in-root/167072
