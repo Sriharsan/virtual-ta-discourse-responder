@@ -27,74 +27,240 @@ logger = logging.getLogger(__name__)
 class TDSKnowledgeBase:
     def __init__(self):
         self.knowledge_base = {
-            'course_info': {
-                'title': 'Tools in Data Science (TDS)',
-                'term': '2025-01',
-                'grading': 'Best 4 out of 7 GA scores',
-                'passing_criteria': 'Minimum 40% overall',
-                'prerequisites': 'GA1 must be completed',
-                'container_tool': 'Podman (preferred over Docker for this course)',
-                'deployment': 'Vercel recommended for web deployment'
+        'course_info': {
+        'title': 'Tools in Data Science (TDS)',
+        'current_term': '2025-05 (May 2025)',
+        'previous_term': '2025-01 (January 2025)',
+        'grading': 'Best 4 out of 7 GA scores + End-term exam',
+        'passing_criteria': 'Minimum 40% overall to pass',
+        'prerequisites': 'GA1 must be completed before other GAs',
+        'container_tool': 'Podman (preferred) or Docker',
+        'deployment': 'Vercel/Render recommended for web deployment',
+        'forum_url': 'https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34',
+        'course_website': 'https://tds.s-anand.net/',
+        'instructor': 'S. Anand',
+        'evaluation_method': 'Automated LLM-based evaluation'
+    },
+    'project_info': {
+        'project1_title': 'Virtual TA for TDS Course',
+        'project1_deadline': 'Check latest announcement on Discourse',
+        'project1_requirements': [
+            'Build a Virtual TA system',
+            'Answer TDS course-related queries',
+            'Use semantic search or knowledge base',
+            'Support text and image inputs',
+            'Deploy on cloud platform',
+            'Public GitHub repo with MIT license',
+            'Comprehensive documentation'
+        ],
+        'github_requirements': 'Public repository with MIT license',
+        'evaluation_method': 'Automated evaluation using LLMs',
+        'submission_format': 'GitHub repository URL + deployed URL'
+    },
+    'may_2025_updates': {
+        'key_changes': [
+            'Updated project requirements for Virtual TA',
+            'Enhanced evaluation criteria',
+            'New deployment guidelines',
+            'Updated API usage policies'
+        ],
+        'important_links': [
+            'https://discourse.onlinedegree.iitm.ac.in/t/project1-virtual-ta-discussion-thread-tds-may-2025/176077',
+            'https://tds.s-anand.net/',
+            'https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34'
+        ]
+    },
+    'common_issues': {
+        'api_quota_error': {
+            'description': 'API quota exceeded or insufficient credits',
+            'solutions': [
+                'Check OpenAI API usage dashboard',
+                'Verify API key is active and has credits',
+                'Contact instructor if course quota exceeded',
+                'Implement rate limiting in your code',
+                'Use caching to reduce API calls'
+            ]
+        },
+        'deployment_issues': {
+            'vercel': [
+                'Check build logs for specific errors',
+                'Ensure all dependencies in package.json/requirements.txt',
+                'Set environment variables correctly',
+                'Check function timeout limits (10s for hobby plan)',
+                'Verify API routes are configured properly'
+            ],
+            'render': [
+                'Check deploy logs',
+                'Ensure start command is correct',
+                'Set environment variables',
+                'Check port configuration',
+                'Verify health check endpoint'
+            ]
+        },
+        'github_issues': {
+            'repository_setup': [
+                'Make repository public',
+                'Add MIT license file',
+                'Include comprehensive README.md',
+                'Add requirements.txt/package.json',
+                'Include .gitignore for sensitive files'
+            ]
+        },
+        'programming_errors': {
+            'python_environment': [
+                'Use virtual environment: python -m venv venv',
+                'Activate: source venv/bin/activate (Linux/Mac) or venv\\Scripts\\activate (Windows)',
+                'Install requirements: pip install -r requirements.txt',
+                'Check Python version compatibility (3.8-3.11 recommended)'
+            ]
+        }
+    },
+    'technical_requirements': {
+        'virtual_ta_specifications': {
+            'input_support': ['Text queries', 'Image inputs (OCR)', 'File uploads'],
+            'output_format': {
+                'required_fields': ['answer', 'links', 'timestamp'],
+                'optional_fields': ['confidence', 'sources', 'related_topics']
             },
-            'project_info': {
-                'project1_deadline': '16 Feb 2025 (extended)',
-                'github_requirements': 'Public repository with MIT license',
-                'evaluation_method': 'Automated evaluation using LLMs'
+            'search_capabilities': [
+                'Semantic search using embeddings',
+                'Keyword-based search',
+                'Forum content indexing',
+                'Course material integration'
+            ],
+            'deployment_requirements': [
+                'REST API endpoint',
+                'JSON input/output',
+                'Error handling',
+                'Rate limiting',
+                'Health check endpoint'
+            ]
+        }
+    },
+    'programming_topics': {
+        'pandas_vs_numpy': {
+            'pandas': 'Data manipulation library built on NumPy, designed for structured data with DataFrames and Series',
+            'numpy': 'Numerical computing library for arrays and mathematical operations',
+            'key_differences': [
+                'NumPy: Homogeneous arrays, mathematical operations, lower-level',
+                'Pandas: Heterogeneous data, data analysis, higher-level abstractions',
+                'NumPy: Better for numerical computing and linear algebra',
+                'Pandas: Better for data cleaning, analysis, and manipulation'
+            ],
+            'when_to_use': {
+                'numpy': 'Mathematical computations, array operations, performance-critical code',
+                'pandas': 'Data analysis, CSV/Excel processing, data cleaning, time series'
+            }
+        },
+        'virtual_environments': {
+            'purpose': 'Isolate Python dependencies for different projects',
+            'creation': 'python -m venv myenv',
+            'activation': {
+                'linux_mac': 'source myenv/bin/activate',
+                'windows': 'myenv\\Scripts\\activate'
             },
-            'common_issues': {
-                'quota_error': 'Check API key and usage limits. Contact instructor if quota exceeded.',
-                'submission_issues': 'Try clearing cache, different browser, or contact support.',
-                'vercel_deployment': 'Check build logs, ensure all dependencies in package.json',
-                'gcp_setup': 'Select organization or create new project without parent folder'
-            },
-            'resources': {
-                'course_material': 'YouTube playlist available for recorded sessions',
-                'support': 'Post questions on Discourse forum for help'
-            },
-            # Enhanced programming knowledge
-            'programming_topics': {
-                'pandas_vs_numpy': {
-                    'pandas': 'Data manipulation library built on NumPy, designed for structured data with DataFrames and Series',
-                    'numpy': 'Numerical computing library for arrays and mathematical operations',
-                    'difference': 'NumPy is for numerical arrays, Pandas is for data analysis with labeled data structures'
+            'common_issues': [
+                'ModuleNotFoundError: Usually wrong environment or missing installation',
+                'Permission errors: Check user permissions and use --user flag if needed',
+                'Path issues: Ensure virtual environment is activated'
+            ]
+        },
+        'api_integration': {
+            'openai_api': {
+                'authentication': 'Use API key in headers: Authorization: Bearer YOUR_API_KEY',
+                'models': {
+                    'recommended': 'gpt-3.5-turbo-0125',
+                    'alternatives': 'gpt-4o-mini (if available)',
+                    'avoid': 'Deprecated models'
                 },
-                'virtual_environments': {
-                    'purpose': 'Isolate Python dependencies for different projects',
-                    'commands': 'python -m venv myenv, source myenv/bin/activate (Linux/Mac), myenv\\Scripts\\activate (Windows)',
-                    'issues': 'ModuleNotFoundError often indicates wrong environment or missing installation'
-                },
-                'python_versions': {
-                    'compatibility': 'TDS course supports Python 3.8 to 3.11',
-                    'recommendation': 'Use Python 3.9 or 3.10 for best compatibility',
-                    'issues': 'Some packages may not work with Python 3.12+'
-                }
-            },
-            # GA-specific guidance
-            'ga_specific': {
-                'ga1': 'Prerequisites completion required before other GAs',
-                'ga2': 'Common token counting issues - use tiktoken library',
-                'ga3': 'Vector database validation issues - check answer format',
-                'ga4': 'Dashboard scoring includes bonus points (110/100)',
-                'ga5': 'Use gpt-3.5-turbo-0125, not gpt-4o-mini from AI proxy'
-            },
-            # Tools and frameworks
-            'tools': {
-                'promptfoo': {
-                    'config': 'promptfoo-config.yaml configuration file needed',
-                    'common_errors': 'Provider not found - check API keys and URLs',
-                    'setup': 'npm install -g promptfoo, then promptfoo init'
-                },
-                'langchain': {
-                    'vector_stores': 'FAISS and Chroma supported for RAG applications',
-                    'usage': 'Use for building RAG (Retrieval Augmented Generation) systems',
-                    'issues': 'Version compatibility important - check requirements.txt'
-                },
-                'deployment': {
-                    'vercel': 'Preferred for web apps, check build logs for errors',
-                    'debug': 'Common issues: missing env vars, build failures, 404 errors'
-                }
+                'best_practices': [
+                    'Implement exponential backoff for rate limits',
+                    'Cache responses when possible',
+                    'Monitor token usage',
+                    'Handle errors gracefully'
+                ]
             }
         }
+    },
+    'ga_specific': {
+        'general_guidelines': {
+            'ga1': 'Must be completed before attempting other GAs',
+            'submission_format': 'Follow exact format specified in assignment',
+            'deadline_policy': 'No extensions unless announced officially',
+            'evaluation': 'Automated LLM-based evaluation'
+        },
+        'project1_virtual_ta': {
+            'core_requirements': [
+                'Answer TDS course queries accurately',
+                'Support both text and image inputs',
+                'Provide relevant links and sources',
+                'Deploy as accessible web service',
+                'Include comprehensive documentation'
+            ],
+            'evaluation_criteria': [
+                'Accuracy of responses',
+                'Relevance of provided links',
+                'Code quality and documentation',
+                'Deployment accessibility',
+                'Error handling robustness'
+            ]
+        }
+    },
+    'tools_and_frameworks': {
+        'web_frameworks': {
+            'flask': {
+                'pros': 'Lightweight, flexible, easy to learn',
+                'cons': 'Less built-in features, requires more setup',
+                'best_for': 'Simple APIs, prototyping'
+            },
+            'fastapi': {
+                'pros': 'Fast, automatic API documentation, type hints',
+                'cons': 'Newer, smaller community',
+                'best_for': 'Production APIs, type safety'
+            }
+        },
+        'search_technologies': {
+            'faiss': {
+                'description': 'Facebook AI Similarity Search for vector databases',
+                'use_case': 'Semantic search with embeddings',
+                'setup': 'pip install faiss-cpu'
+            },
+            'elasticsearch': {
+                'description': 'Full-text search engine',
+                'use_case': 'Text search, analytics',
+                'complexity': 'Higher setup overhead'
+            }
+        },
+        'ocr_tools': {
+            'pytesseract': {
+                'description': 'Python wrapper for Tesseract OCR',
+                'installation': 'pip install pytesseract + install Tesseract binary',
+                'use_case': 'Extract text from images'
+            }
+        }
+    },
+    'discourse_specific': {
+        'forum_structure': {
+            'main_category': 'TDS Knowledge Base',
+            'url': 'https://discourse.onlinedegree.iitm.ac.in/c/courses/tds-kb/34',
+            'project_thread': 'https://discourse.onlinedegree.iitm.ac.in/t/project1-virtual-ta-discussion-thread-tds-may-2025/176077'
+        },
+        'common_topics': [
+            'API quota and usage issues',
+            'Deployment problems',
+            'GitHub repository setup',
+            'Virtual environment issues',
+            'Model selection questions',
+            'Evaluation criteria clarifications'
+        ],
+        'search_tips': [
+            'Use specific keywords',
+            'Check recent posts first',
+            'Look for official announcements',
+            'Read pinned topics'
+        ]
+    }
+}
         self.scraped_data = []
         self.last_updated = None
         
