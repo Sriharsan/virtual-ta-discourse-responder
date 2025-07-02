@@ -4,7 +4,7 @@ prompts:
   - "{{question}}"  
 
 providers:
-  - id: https
+  - id: http
     config:
       url: https://virtual-ta-discourse-responder.onrender.com/api
       method: POST
